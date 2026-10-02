@@ -1,6 +1,8 @@
 (() => {
   "use strict";
 
+  // 앱 버전(APP_VERSION): 백업 화면에 표시. sw.js의 CACHE 이름과 같이 올림
+  const APP_VERSION = "v8";
   // 저장소 이름(KEY): 휴대폰 브라우저 안에 자료를 저장할 때 쓰는 이름
   const KEY = "dawon-mobile-v1";
   // 업무 종류(ROLES)
@@ -627,7 +629,8 @@
     <div class="card">
       ${state.workers.length || state.jobs.length ? `<p class="small">연습이 끝나면 아래 '모든 자료 지우기'로 지우고 실제로 쓰시면 돼요.</p>` : `<button class="btn big" data-act="seed">연습용 예시 자료 넣기</button>`}
     </div>
-    <div class="danger-zone"><button class="link-btn" data-act="wipe">모든 자료 지우기</button></div>`;
+    <div class="danger-zone"><button class="link-btn" data-act="wipe">모든 자료 지우기</button></div>
+    <p class="app-version">앱 버전 ${APP_VERSION}</p>`;
 
   // ---------- 그리기 ----------
   const TITLES = { home: "다원 소개소", jobs: "일감", people: "사람", scripts: "문자 문구", more: "백업·설정" };
@@ -1161,7 +1164,8 @@
 
   // 인터넷이 없어도 열리도록 준비 (웹 주소로 열었을 때만 동작)
   if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
-    navigator.serviceWorker.register("sw.js").catch(() => {});
+    // updateViaCache: "none" → 새 버전이 있는지 확인할 때 기억해 둔 옛 파일을 쓰지 않음
+    navigator.serviceWorker.register("sw.js", { updateViaCache: "none" }).catch(() => {});
   }
 
   // 사진을 먼저 불러온 뒤 화면을 그림 (사진을 못 불러와도 화면은 그림)
