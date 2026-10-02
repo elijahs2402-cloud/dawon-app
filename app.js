@@ -2,7 +2,7 @@
   "use strict";
 
   // 앱 버전(APP_VERSION): 백업 화면에 표시. sw.js의 CACHE 이름과 같이 올림
-  const APP_VERSION = "v13";
+  const APP_VERSION = "v14";
   // 저장소 이름(KEY): 휴대폰 브라우저 안에 자료를 저장할 때 쓰는 이름
   const KEY = "dawon-mobile-v1";
   // 업무 종류(ROLES)
@@ -39,6 +39,7 @@
     percent: '<path d="M19 5 5 19"/><circle cx="7" cy="7" r="2.5"/><circle cx="17" cy="17" r="2.5"/>',
     trash: '<path d="M4 7h16M9 7V4.5h6V7M6.5 7l1 13h9l1-13"/>',
     play: '<circle cx="12" cy="12" r="9"/><path d="M10 8.5v7l5.5-3.5z"/>',
+    search: '<circle cx="11" cy="11" r="6.5"/><path d="m20 20-4.2-4.2"/>',
     walk: '<circle cx="13" cy="4.5" r="1.8"/><path d="M10 21l2-6 2.5 2.5V21M8 12l2.5-4.5h3l2 4 2.5 1M10.5 7.5 9 13l3 2"/>',
   };
   // icon("phone") → 선 아이콘. 두 번째 칸에 "fill"을 주면 속을 채움 (예: 하트)
@@ -62,6 +63,27 @@
     return `${rel}${m}/${d}(${w})`;
   };
   const won = (n) => (Number(n) ? `${Number(n).toLocaleString("ko-KR")}원` : "일당 미정");
+  // ---------- 근무 시간 · 시급 계산 ----------
+  const toMin = (t) => { const [h, m] = String(t || "").split(":").map(Number); return (h || 0) * 60 + (m || 0); };
+  // workMinutes: 끝 - 시작 - 휴게 (끝이 시작보다 이르면 밤을 넘긴 근무로 봄. 예: 18:00~02:00 = 8시간)
+  const workMinutes = (start, end, breakMin = 0) => {
+    if (!start || !end) return 0;
+    let d = toMin(end) - toMin(start);
+    if (d <= 0) d += 24 * 60;
+    return Math.max(0, d - (Number(breakMin) || 0));
+  };
+  const hoursText = (min) => { const h = Math.floor(min / 60); const m = min % 60; return `${h ? `${h}시간` : ""}${h && m ? " " : ""}${m ? `${m}분` : ""}` || "0시간"; };
+  // 일당 = 시급 × 근무시간 (원 단위로 반올림)
+  const dayPayOf = (hourly, min) => Math.round((Number(hourly) || 0) * min / 60);
+  // 문자·화면용 급여 글: 시급이 있으면 "시급 11,000원 · 일당 88,000원"
+  const payText = (j) => (j.hourly ? `시급 ${won(j.hourly)} · 일당 ${won(j.pay)}` : `일당 ${won(j.pay)}`);
+  // 시간을 "오전 9:00"처럼
+  const timeLabel = (t) => {
+    if (!t) return "";
+    const [h, m] = t.split(":").map(Number);
+    const part = h === 0 ? "밤" : h < 6 ? "새벽" : h < 12 ? "오전" : h === 12 ? "낮" : h < 18 ? "오후" : h < 22 ? "저녁" : "밤";
+    return `${part} ${h % 12 || 12}:${String(m).padStart(2, "0")}`;
+  };
   const digits = (p) => String(p || "").replace(/[^0-9+]/g, "");
   const telHref = (p) => `tel:${digits(p)}`;
   // 갤럭시 문자 앱을 내용이 채워진 상태로 여는 주소
@@ -297,7 +319,7 @@
   };
 
   // ---------- 문자 내용 ----------
-  const offerMsg = (j, w) => { const r = rest(j.restaurantId); return `[다원] ${w.name}님~ ${dateText(j.date)} ${j.start}~${j.end} ${r?.name || ""}${r?.area ? `(${r.area})` : ""} ${j.role} 일 있어요. 일당 ${won(j.pay)}. 가능하시면 연락 주세요 😊`; };
+  const offerMsg = (j, w) => { const r = rest(j.restaurantId); return `[다원] ${w.name}님~ ${dateText(j.date)} ${j.start}~${j.end} ${r?.name || ""}${r?.area ? `(${r.area})` : ""} ${j.role} 일 있어요. ${payText(j)}.${groupOf(j).length > 1 ? ` (${groupRange(j)} ${groupOf(j).length}일 연속)` : ""} 가능하시면 연락 주세요 😊`; };
   // mapUrl: 네이버 지도 검색 주소 (주소가 없으면 식당 이름+지역으로 찾음). 누르면 지도 앱이나 지도 웹이 열림
   const mapUrl = (r) => {
     const q = (r?.address ? r.address.replace(/\s*\([^)]*\)\s*$/, "") : `${r?.name || ""} ${r?.area || ""}`).trim();
@@ -310,6 +332,12 @@
     return [
       `[다원] ${w.name}님 확정됐어요!`,
       `${dateText(j.date)} ${j.start}까지 ${r?.name || ""} 가시면 돼요.`,
+      // 여러 날 연속으로 확정됐으면 근무일을 모두 적음
+      (() => {
+        const days = groupOf(j).filter((x) => state.assigns.some((a) => a.jobId === x.id && a.workerId === w.id && a.status === "confirmed"));
+        return days.length > 1 ? `📅 근무일: ${days.map((x) => dateText(x.date).replace(/^(오늘|내일|어제) /, "")).join(", ")} (${days.length}일)` : "";
+      })(),
+      `⏰ ${j.start}~${j.end}${j.breakMin ? ` (휴게 ${hoursText(Number(j.breakMin))})` : ""} · ${payText(j)}`,
       r?.address ? `📍 주소: ${fullAddress(r)}` : "",
       r?.way ? `🚶 오시는 길: ${r.way}` : "",
       map ? `🗺 지도: ${map}` : "",
@@ -429,13 +457,17 @@
     const conf = confirmedOf(j).length;
     const sb = assignsOf(j.id).filter((a) => a.status === "standby").length;
     const past = j.date < today();
+    const g = groupOf(j);
     return `<button class="job-card ${need ? "need" : "full"} ${past ? "past" : ""}" data-act="open-job" data-id="${j.id}">
-      <div class="job-when">${esc(dateText(j.date))} · ${esc(j.start)}~${esc(j.end)}</div>
+      <div class="job-when">${esc(dateText(j.date))} · ${esc(j.start)}~${esc(j.end)}${g.length > 1 ? ` <span class="pill gray">${g.length}일 연속 · ${g.indexOf(j) + 1}일째</span>` : ""}</div>
       <div class="job-what"><strong>${esc(restName(j))}</strong><span class="role">${esc(j.role)}</span></div>
       <div class="job-state">${need ? `<span class="pill need">${need}명 더 필요</span>` : `<span class="pill ok">인원 다 참</span>`}
       <span class="muted">확정 ${conf}/${esc(j.headcount)}명${sb ? ` · 대기 ${sb}명` : ""}</span></div></button>`;
   };
   const sortJobs = (a, b) => a.date.localeCompare(b.date) || (a.start || "").localeCompare(b.start || "");
+  // 여러 날 일감 묶음: 같은 group 번호를 가진 일감들 (날짜순). 묶음이 아니면 자기 하나
+  const groupOf = (j) => (j?.group ? state.jobs.filter((x) => x.group === j.group).sort(sortJobs) : [j]);
+  const groupRange = (j) => { const g = groupOf(j); return `${dateText(g[0].date).replace(/^(오늘|내일|어제) /, "")}~${dateText(g[g.length - 1].date).replace(/^(오늘|내일|어제) /, "")}`; };
 
   // 근무 날이 지났는데 출근 여부를 아직 안 적은 사람들
   const pendingChecks = () => state.assigns
@@ -580,20 +612,23 @@
     let html = `<div class="card">
       <div class="job-when">${esc(dateText(j.date))}</div>
       <div class="job-what" style="font-size:1.3rem"><strong>${esc(restName(j))}</strong><span class="role">${esc(j.role)}</span></div>
+      ${groupOf(j).length > 1 ? `<div class="day-tabs" aria-label="연속 근무 날짜">${groupOf(j).map((x, i) => `<button class="day-tab ${x.id === j.id ? "on" : ""}" data-act="open-job" data-id="${x.id}"><small>${i + 1}일째</small>${esc(dateText(x.date).replace(/^(오늘|내일|어제) /, ""))}</button>`).join("")}</div>` : ""}
       <div class="facts">
         <div class="fact"><small>시간</small><strong>${esc(j.start)}~${esc(j.end)}</strong></div>
-        <div class="fact"><small>일당</small><strong>${esc(won(j.pay))}</strong></div>
+        <div class="fact"><small>근무${j.breakMin ? ` (휴게 ${hoursText(Number(j.breakMin))})` : ""}</small><strong>${hoursText(workMinutes(j.start, j.end, j.breakMin))}</strong></div>
+        ${j.hourly ? `<div class="fact"><small>시급</small><strong>${esc(won(j.hourly))}</strong></div>` : ""}
+        <div class="fact"><small>일당${j.hourly ? " (총)" : ""}</small><strong>${esc(won(j.pay))}</strong></div>
         <div class="fact"><small>필요 인원</small><strong>${esc(j.headcount)}명</strong></div>
         <div class="fact"><small>지역</small><strong>${esc(r?.area || "-")}</strong></div>
       </div>
       ${r?.address ? `<p class="meta-line">${icon("pin")}${esc(fullAddress(r))}</p>` : ""}
       ${r?.way ? `<p class="meta-line">${icon("walk")}${esc(r.way)}</p>` : ""}
       ${mapUrl(r) ? `<a class="map-link" href="${mapUrl(r)}" target="_blank" rel="noopener">${icon("pin")}지도 보기</a>` : ""}
-      ${r && !r.address && !r.way ? `<button class="map-link" data-act="edit-rest" data-id="${r.id}">${icon("plus")}주소·오시는 길 넣기 (확정 문자에 들어가요)</button>` : ""}
+      ${r && !r.address && !r.way ? `<button class="map-link" data-act="edit-rest" data-id="${r.id}">${icon("plus")}주소·오시는 길 넣기</button>` : ""}
       ${j.memo ? `<p class="meta-line">${icon("note")}${esc(j.memo)}</p>` : ""}
       <div class="btn-row">${r?.phone
         ? `<a class="btn" href="${telHref(r.phone)}">${icon("phone")}식당 전화</a><a class="btn" href="${smsHref(r.phone, restJobMsg(j))}">${icon("message")}식당 문자</a>`
-        : r ? `<button class="btn" data-act="edit-rest" data-id="${r.id}">${icon("phone")}식당 번호 넣기</button>` : ""}<button class="btn" data-act="edit-job" data-id="${j.id}">${icon("edit")}고치기</button></div>
+        : r ? `<button class="btn" data-act="edit-rest" data-id="${r.id}">${icon("phone")}번호 넣기</button>` : ""}<button class="btn" data-act="edit-job" data-id="${j.id}">${icon("edit")}고치기</button></div>
     </div>`;
 
     if (need && standby.length) html += `<div class="banner need">대기 중인 분이 ${standby.length}명 있어요. 아래에서 바로 <strong>확정</strong>하세요.</div>`;
@@ -775,11 +810,28 @@
   const val = (fd, k) => String(fd.get(k) ?? "").trim();
 
   // 일감 받기 / 고치기
+  // 시간 고르기: [시 ▾] [분 ▾] 두 칸 (분은 10분 단위). 실제 값은 숨은 칸(name)에 "09:30"처럼 들어감
+  const HOURS = [...Array(24).keys()].map((n) => (n + 5) % 24); // 새벽 5시부터 시작하는 순서
+  const hourLabel = (h) => `${h === 0 ? "밤" : h < 6 ? "새벽" : h < 12 ? "오전" : h === 12 ? "낮" : h < 18 ? "오후" : h < 22 ? "저녁" : "밤"} ${h % 12 || 12}시`;
+  const timePicker = (name, value) => {
+    const [h, m] = value ? value.split(":").map(Number) : [null, null];
+    const mins = [0, 10, 20, 30, 40, 50];
+    if (m !== null && !mins.includes(m)) mins.push(m); // 예전에 1분 단위로 넣은 값도 보이게
+    return `<div class="time-pick" data-time="${name}">
+      <select aria-label="시" data-part="h"><option value="">시</option>${HOURS.map((x) => `<option value="${x}" ${x === h ? "selected" : ""}>${hourLabel(x)}</option>`).join("")}</select>
+      <select aria-label="분" data-part="m">${mins.sort((a, b) => a - b).map((x) => `<option value="${x}" ${x === (m ?? 0) ? "selected" : ""}>${String(x).padStart(2, "0")}분</option>`).join("")}</select>
+      <input type="hidden" name="${name}" value="${esc(value || "")}" />
+    </div>`;
+  };
+  const BREAKS = [[0, "없음"], [30, "30분"], [60, "1시간"], [90, "1시간 30분"]];
+  const MAX_DAYS = 14;
+
   const jobForm = (existing) => {
-    const j = existing || { date: today(), start: "", end: "", pay: "", headcount: 1, role: "", memo: "", restaurantId: "" };
+    const j = existing || { date: today(), start: "", end: "", hourly: "", breakMin: 0, pay: "", headcount: 1, role: "", memo: "", restaurantId: "" };
     // 최근에 일감을 준 식당이 위로
     const lastUse = (r) => state.jobs.filter((x) => x.restaurantId === r.id).map((x) => x.date).sort().pop() || "";
     const rests = [...state.restaurants].sort((a, b) => lastUse(b).localeCompare(lastUse(a)) || a.name.localeCompare(b.name, "ko"));
+    const quick = ["오늘", "내일", "모레"].map((label, n) => `<label class="chip"><input type="radio" name="dateQuick" value="${today(n)}" ${j.date === today(n) ? "checked" : ""} /><span>${label}</span></label>`).join("");
     const body = `
       <label class="field">식당
         <select name="restaurantId" required>
@@ -788,20 +840,42 @@
           <option value="__new" ${rests.length ? "" : "selected"}>+ 새 식당 등록</option>
         </select></label>
       <div class="new-rest" ${rests.length ? "hidden" : ""}>
-        <label class="field">식당 이름<input name="rName" autocomplete="off" /></label>
+        ${placeNameField("r")}
         <div class="two"><label class="field">지역<input name="rArea" placeholder="예: 종로" /></label><label class="field">전화<input name="rPhone" type="tel" inputmode="tel" /></label></div>
         ${addressFields("r")}
         <label class="field">오시는 길<input name="rWay" placeholder="예: 종로3가역 5번 출구, 파리바게뜨 골목 2층" /></label>
       </div>
       <fieldset class="field"><legend>업무</legend>${roleChips("role", [j.role], false)}</fieldset>
       <fieldset class="field"><legend>날짜</legend>
-        <div class="chips">${["오늘", "내일", "모레"].map((label, n) => `<label class="chip"><input type="radio" name="dateQuick" value="${today(n)}" ${j.date === today(n) ? "checked" : ""} /><span>${label}</span></label>`).join("")}</div>
-        <input type="date" name="date" value="${esc(j.date)}" required />
+        <div class="chips">${quick}${existing ? "" : `<label class="chip"><input type="radio" name="dateQuick" value="multi" /><span>여러 날</span></label>`}</div>
+        <div class="date-range">
+          <input type="date" name="date" value="${esc(j.date)}" required />
+          <span class="range-to" hidden>~</span>
+          <input type="date" name="dateEnd" hidden />
+        </div>
+        <span class="hint" id="days-hint"></span>
       </fieldset>
-      <div class="two"><label class="field">시작<input type="time" name="start" value="${esc(j.start)}" required /></label><label class="field">끝<input type="time" name="end" value="${esc(j.end)}" required /></label></div>
-      <label class="field">일당 (원)<input name="pay" inputmode="numeric" placeholder="예: 130000" value="${esc(j.pay || "")}" /><span class="hint" id="pay-hint"></span></label>
+      <div class="field">시작${timePicker("start", j.start)}</div>
+      <div class="field">끝${timePicker("end", j.end)}</div>
+      <fieldset class="field"><legend>휴게시간 <span class="hint" style="display:inline">시급 계산에서 빠져요</span></legend>
+        <div class="chips">${BREAKS.map(([v, label]) => `<label class="chip"><input type="radio" name="breakMin" value="${v}" ${Number(j.breakMin || 0) === v ? "checked" : ""} /><span>${label}</span></label>`).join("")}</div>
+      </fieldset>
+      <label class="field">시급 (원)<input name="hourly" inputmode="numeric" placeholder="예: 11000" value="${esc(j.hourly || "")}" />
+        <span class="pay-calc" id="pay-calc"></span></label>
       <div class="field">필요 인원<div class="stepper"><button type="button" data-step="-1" aria-label="줄이기">${icon("minus")}</button><input name="headcount" type="number" min="1" max="20" value="${esc(j.headcount)}" /><button type="button" data-step="1" aria-label="늘리기">${icon("plus")}</button></div></div>
       <label class="field">메모<textarea name="memo" rows="2" placeholder="예: 앞치마 지참">${esc(j.memo)}</textarea></label>`;
+
+    // 날짜 목록: 여러 날이면 시작~끝의 모든 날짜
+    const datesOf = (form) => {
+      const from = form.elements.date.value;
+      if (!form.querySelector("input[name=dateQuick][value=multi]")?.checked) return from ? [from] : [];
+      const to = form.elements.dateEnd.value;
+      if (!from || !to || to < from) return [];
+      const out = [];
+      const d = new Date(`${from}T00:00:00`);
+      while (ymd(d) <= to && out.length <= MAX_DAYS) { out.push(ymd(d)); d.setDate(d.getDate() + 1); }
+      return out;
+    };
 
     openSheet({
       title: existing ? "일감 고치기" : "일감 받기",
@@ -811,7 +885,62 @@
         const select = form.elements.restaurantId;
         const box = form.querySelector(".new-rest");
         bindAddress(form, "r", form.elements.rArea);
-        const payHint = () => { const n = Number(String(form.elements.pay.value).replace(/[^0-9]/g, "")); $("#pay-hint", form).textContent = n ? `${n.toLocaleString("ko-KR")}원 · 수수료 ${Math.round(n * state.feeRate / 100).toLocaleString("ko-KR")}원` : ""; };
+        bindPlace(form, "r");
+        // 시간 칸: 시·분을 고르면 숨은 칸에 "HH:MM"으로 넣음
+        const setPicker = (name, value) => {
+          const wrap = form.querySelector(`[data-time="${name}"]`);
+          const [h, m] = value ? value.split(":").map(Number) : ["", 0];
+          wrap.querySelector('[data-part="h"]').value = value ? String(h) : "";
+          const ms = wrap.querySelector('[data-part="m"]');
+          if (value && ![...ms.options].some((o) => Number(o.value) === m)) ms.insertAdjacentHTML("beforeend", `<option value="${m}">${String(m).padStart(2, "0")}분</option>`);
+          ms.value = String(m || 0);
+          form.elements[name].value = value || "";
+        };
+        form.querySelectorAll(".time-pick").forEach((wrap) => wrap.addEventListener("change", () => {
+          const h = wrap.querySelector('[data-part="h"]').value;
+          const m = wrap.querySelector('[data-part="m"]').value;
+          form.elements[wrap.dataset.time].value = h === "" ? "" : `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+          calc();
+        }));
+        // 시급 × 근무시간 = 일당 계산해서 바로 보여줌
+        const calc = () => {
+          const hourly = Number(String(form.elements.hourly.value).replace(/[^0-9]/g, ""));
+          const min = workMinutes(form.elements.start.value, form.elements.end.value, form.querySelector("input[name=breakMin]:checked")?.value);
+          const out = $("#pay-calc", form);
+          if (hourly && min) {
+            const pay = dayPayOf(hourly, min);
+            out.innerHTML = `${won(hourly)} × ${hoursText(min)} = <strong>일당 ${won(pay)}</strong><small>수수료 ${won(Math.round(pay * state.feeRate / 100))}</small>`;
+          } else if (existing?.pay && !existing.hourly && !hourly) {
+            out.innerHTML = `예전에 넣은 일당: <strong>${won(existing.pay)}</strong><small>시급을 넣으면 다시 계산돼요</small>`;
+          } else out.innerHTML = min ? `근무 ${hoursText(min)} · 시급을 넣으면 일당이 계산돼요` : "";
+        };
+        // 날짜: 오늘·내일·모레 / 여러 날
+        const multi = form.querySelector("input[name=dateQuick][value=multi]");
+        const syncDates = () => {
+          const isMulti = Boolean(multi?.checked);
+          form.querySelector(".range-to").hidden = !isMulti;
+          form.querySelector(".date-range").classList.toggle("multi", isMulti);
+          form.elements.dateEnd.hidden = !isMulti;
+          form.elements.dateEnd.required = isMulti;
+          if (isMulti && !form.elements.dateEnd.value) {
+            const d = new Date(`${form.elements.date.value || today()}T00:00:00`);
+            d.setDate(d.getDate() + 2);
+            form.elements.dateEnd.value = ymd(d);
+          }
+          const n = datesOf(form).length;
+          $("#days-hint", form).textContent = isMulti ? (n ? `${n}일 연속 · 날짜마다 일감이 하나씩 만들어져요` : "끝 날짜를 시작 날짜 뒤로 골라 주세요") : "";
+        };
+        form.querySelectorAll("input[name=dateQuick]").forEach((i) => i.addEventListener("change", () => {
+          if (i.value !== "multi") form.elements.date.value = i.value;
+          syncDates();
+        }));
+        form.elements.date.addEventListener("change", () => {
+          if (!multi?.checked) form.querySelectorAll("input[name=dateQuick]").forEach((i) => { i.checked = i.value === form.elements.date.value; });
+          syncDates();
+        });
+        form.elements.dateEnd.addEventListener("change", syncDates);
+        form.querySelectorAll("input[name=breakMin]").forEach((i) => i.addEventListener("change", calc));
+        form.elements.hourly.addEventListener("input", calc);
         const syncNew = () => {
           const isNew = select.value === "__new";
           box.hidden = !isNew;
@@ -824,47 +953,59 @@
           const last = state.jobs.filter((x) => x.restaurantId === select.value).sort(sortJobs).pop();
           if (!last) return;
           form.querySelectorAll("input[name=role]").forEach((i) => { i.checked = i.value === last.role; });
-          form.elements.start.value = last.start;
-          form.elements.end.value = last.end;
-          if (last.pay) form.elements.pay.value = last.pay;
-          payHint();
+          setPicker("start", last.start);
+          setPicker("end", last.end);
+          form.querySelectorAll("input[name=breakMin]").forEach((i) => { i.checked = Number(i.value) === Number(last.breakMin || 0); });
+          if (last.hourly) form.elements.hourly.value = last.hourly;
+          calc();
           toast("지난번 조건을 채워 넣었어요");
         });
-        form.querySelectorAll("input[name=dateQuick]").forEach((i) => i.addEventListener("change", () => { form.elements.date.value = i.value; }));
-        form.elements.date.addEventListener("change", () => form.querySelectorAll("input[name=dateQuick]").forEach((i) => { i.checked = i.value === form.elements.date.value; }));
-        form.elements.pay.addEventListener("input", payHint);
         syncNew();
-        payHint();
+        syncDates();
+        calc();
       },
-      onSubmit: (fd) => {
+      onSubmit: (fd, form) => {
+        const start = val(fd, "start");
+        const end = val(fd, "end");
+        if (!start || !end) { toast("시작·끝 시간을 골라 주세요"); form.querySelector(".time-pick").scrollIntoView({ block: "center" }); return false; }
+        const dates = datesOf(form);
+        if (!dates.length) { toast("날짜를 확인해 주세요"); return false; }
+        if (dates.length > MAX_DAYS) { toast(`한 번에 ${MAX_DAYS}일까지 넣을 수 있어요`); return false; }
         let restaurantId = val(fd, "restaurantId");
         if (restaurantId === "__new") {
           const r = { id: uid(), name: val(fd, "rName"), area: val(fd, "rArea"), phone: val(fd, "rPhone"), address: val(fd, "rAddress"), addrDetail: val(fd, "rAddrDetail"), way: val(fd, "rWay"), memo: "" };
           state.restaurants.push(r);
           restaurantId = r.id;
         }
+        const hourly = Number(val(fd, "hourly").replace(/[^0-9]/g, "")) || 0;
+        const breakMin = Number(val(fd, "breakMin")) || 0;
+        // 일당: 시급이 있으면 시급 × 근무시간, 없으면 예전 일당 그대로
+        const pay = hourly ? dayPayOf(hourly, workMinutes(start, end, breakMin)) : Number(existing?.pay) || 0;
         const data = {
           restaurantId,
           role: val(fd, "role"),
-          date: val(fd, "date"),
-          start: val(fd, "start"),
-          end: val(fd, "end"),
-          pay: Number(val(fd, "pay").replace(/[^0-9]/g, "")) || 0,
+          start,
+          end,
+          breakMin,
+          hourly,
+          pay,
           headcount: Math.max(1, Number(val(fd, "headcount")) || 1),
           memo: val(fd, "memo"),
         };
         if (existing) {
-          Object.assign(existing, data);
+          Object.assign(existing, data, { date: dates[0] });
           // 일당이 바뀌면 이미 출근한 분 수수료도 다시 계산
           assignsOf(existing.id).filter((a) => a.outcome === "done").forEach((a) => { a.fee = Math.round(data.pay * state.feeRate / 100); });
           refresh();
           toast("고쳤어요");
         } else {
-          const j2 = { id: uid(), ...data, created: today() };
-          state.jobs.push(j2);
+          // 여러 날이면 날짜마다 일감을 하나씩 만들고 같은 묶음 번호(group)를 붙임
+          const group = dates.length > 1 ? uid() : "";
+          const made = dates.map((date) => ({ id: uid(), ...data, date, ...(group ? { group } : {}), created: today() }));
+          state.jobs.push(...made);
           save();
-          go({ name: "job", id: j2.id });
-          toast("일감을 저장했어요. 추천 순서대로 연락해 보세요.");
+          go({ name: "job", id: made[0].id });
+          toast(made.length > 1 ? `${made.length}일치 일감을 만들었어요. 확정할 때 남은 날도 한 번에 할 수 있어요` : "일감을 저장했어요. 추천 순서대로 연락해 보세요.");
         }
       },
     });
@@ -1091,6 +1232,89 @@
       addr.focus();
     });
   };
+  // ---------- 식당 이름 검색 (카카오맵 장소 검색: 자바스크립트 키 필요) ----------
+  // KAKAO_JS_KEY: 카카오 개발자 사이트에서 받은 'JavaScript 키'. 비어 있으면 이름 검색 버튼을 숨김
+  // (이 키는 웹페이지에 넣도록 만들어진 키이고, 등록한 사이트 주소에서만 쓸 수 있음)
+  const KAKAO_JS_KEY = "";
+  let kakaoLoading = null;
+  const loadKakaoPlaces = () => (kakaoLoading ||= new Promise((resolve, reject) => {
+    const ready = () => window.kakao?.maps?.services;
+    if (ready()) { resolve(); return; }
+    const s = document.createElement("script");
+    s.src = `https://dapi.kakao.com/v2/maps/sdk.js?appkey=${KAKAO_JS_KEY}&libraries=services&autoload=false`;
+    s.onload = () => {
+      if (!window.kakao?.maps?.load) { kakaoLoading = null; reject(new Error("sdk")); return; }
+      window.kakao.maps.load(() => (ready() ? resolve() : reject(new Error("services"))));
+    };
+    s.onerror = () => { kakaoLoading = null; s.remove(); reject(new Error("load")); };
+    document.head.append(s);
+  }));
+  // 식당 이름 칸 옆에 검색 버튼을 붙이고, 고르면 이름·주소·전화·지역을 채움 (p: "r"이면 rName 등)
+  const bindPlace = (form, p) => {
+    const btn = form.querySelector(`[data-place-search="${p}"]`);
+    if (!btn) return;
+    const el = (k) => form.elements[addrName(p, k)];
+    btn.addEventListener("click", async () => {
+      if (!navigator.onLine) { toast("이름 검색은 인터넷이 필요해요"); return; }
+      const panel = document.createElement("div");
+      panel.className = "addr-search place-search";
+      panel.innerHTML = `<div class="addr-head"><button type="button" class="back" aria-label="뒤로">‹</button><h2>식당 이름으로 찾기</h2></div>
+        <div class="place-q"><input type="search" enterkeyhint="search" placeholder="예: 구미 신평 국밥" value="${esc(el("name").value)}" /><button type="button" class="btn primary">검색</button></div>
+        <p class="addr-tip">지역 이름을 같이 쓰면 더 잘 찾아요 (예: 구미 ○○식당)</p>
+        <div class="place-list"></div>`;
+      form.classList.add("searching");
+      form.append(panel);
+      const close = () => { panel.remove(); form.classList.remove("searching"); };
+      panel.querySelector(".back").addEventListener("click", close);
+      const q = panel.querySelector(".place-q input");
+      const list = panel.querySelector(".place-list");
+      let results = [];
+      let timer;
+      const search = async () => {
+        const text = q.value.trim();
+        if (!text) { list.innerHTML = ""; return; }
+        list.innerHTML = `<p class="addr-tip">찾는 중…</p>`;
+        try { await loadKakaoPlaces(); }
+        catch (_) { list.innerHTML = `<p class="addr-tip">검색을 불러오지 못했어요. 주소 검색이나 직접 입력을 써 주세요.</p>`; return; }
+        const { services } = window.kakao.maps;
+        new services.Places().keywordSearch(text, (data, status) => {
+          if (q.value.trim() !== text || !panel.isConnected) return; // 그사이 글자가 바뀌었으면 무시
+          if (status === services.Status.ZERO_RESULT) { list.innerHTML = `<p class="addr-tip">찾는 식당이 없어요. 지역 이름을 붙이거나 주소 검색을 써 보세요.</p>`; return; }
+          if (status !== services.Status.OK) { list.innerHTML = `<p class="addr-tip">검색이 잠시 안 돼요. 주소 검색이나 직접 입력을 써 주세요.</p>`; return; }
+          results = data;
+          list.innerHTML = data.map((d, i) => `<button type="button" class="place-row" data-i="${i}">
+            <span class="place-name">${esc(d.place_name)}<small>${esc((d.category_name || "").split(" > ").pop())}</small></span>
+            <span class="place-meta">${esc(d.road_address_name || d.address_name)}</span>
+            ${d.phone ? `<span class="place-meta">${icon("phone")}${esc(d.phone)}</span>` : ""}</button>`).join("");
+        }, { size: 15 });
+      };
+      q.addEventListener("input", () => { clearTimeout(timer); timer = setTimeout(search, 400); });
+      q.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); clearTimeout(timer); search(); } });
+      panel.querySelector(".place-q .btn").addEventListener("click", () => { clearTimeout(timer); search(); });
+      list.addEventListener("click", (e) => {
+        const row = e.target.closest(".place-row");
+        if (!row) return;
+        const d = results[Number(row.dataset.i)];
+        el("name").value = d.place_name;
+        el("address").value = d.road_address_name || d.address_name;
+        el("address").readOnly = true;
+        el("addrDetail").value = "";
+        if (d.phone) el("phone").value = d.phone;
+        // 지역: 비어 있으면 주소의 시·군·구 (예: 경북 구미시 … → 구미시)
+        if (!el("area").value.trim()) el("area").value = (d.address_name || "").split(" ")[1] || "";
+        close();
+        el("addrDetail").focus();
+        toast("이름·주소·전화를 넣었어요. 상세 주소(층·호)가 있으면 적어 주세요");
+      });
+      q.focus();
+      if (q.value.trim()) search();
+    });
+  };
+  // 식당 이름 칸 (키가 있으면 오른쪽에 검색 버튼)
+  const placeNameField = (p, value = "", required = false) => `<label class="field">식당 이름
+      <span class="name-search"><input name="${addrName(p, "name")}" autocomplete="off" ${required ? "required" : ""} value="${esc(value)}" />${KAKAO_JS_KEY ? `<button type="button" class="name-search-btn" data-place-search="${p}" aria-label="식당 이름으로 찾기">${icon("search")}찾기</button>` : ""}</span>
+      ${KAKAO_JS_KEY ? `<span class="hint">찾기를 누르면 주소·전화가 자동으로 들어가요</span>` : ""}</label>`;
+
   // 주소 + 상세 주소를 한 줄로 (예: 경상북도 구미시 낙동강변로 889 (신평동), 2층)
   const fullAddress = (r) => [r?.address, r?.addrDetail].filter(Boolean).join(", ");
 
@@ -1100,14 +1324,14 @@
     openSheet({
       title: existing ? "식당 정보" : "식당 등록",
       body: `${existing?.phone ? `<div class="btn-row" style="margin:0 0 16px"><a class="btn" href="${telHref(existing.phone)}">${icon("phone")}전화하기</a><a class="btn" href="${smsHref(existing.phone, "")}">${icon("message")}문자하기</a></div>` : ""}
-        <label class="field">식당 이름<input name="name" required value="${esc(r.name)}" /></label>
+        ${placeNameField("", r.name, true)}
         <div class="two"><label class="field">지역<input name="area" placeholder="예: 종로" value="${esc(r.area)}" /></label><label class="field">전화<input name="phone" type="tel" inputmode="tel" value="${esc(r.phone)}" /></label></div>
         ${addressFields("", r)}
         <label class="field">오시는 길<textarea name="way" rows="2" placeholder="예: 종로3가역 5번 출구로 나와서 파리바게뜨 끼고 골목 50m, 2층">${esc(r.way || "")}</textarea><span class="hint">구직자에게 보내는 확정 문자에 함께 들어가요</span></label>
         ${existing && mapUrl(existing) ? `<a class="btn" style="width:100%;margin:-4px 0 18px" href="${mapUrl(existing)}" target="_blank" rel="noopener">${icon("pin")}지도에서 위치 확인</a>` : ""}
         <label class="field">메모<textarea name="memo" rows="2" placeholder="예: 사장님이 조용한 분 선호">${esc(r.memo)}</textarea></label>
         ${existing ? `<button type="button" class="link-btn" data-act="del-rest" data-id="${existing.id}">이 식당 지우기</button>` : ""}`,
-      onReady: (form) => bindAddress(form, "", form.elements.area),
+      onReady: (form) => { bindAddress(form, "", form.elements.area); bindPlace(form, ""); },
       onSubmit: (fd) => {
         const data = { name: val(fd, "name"), area: val(fd, "area"), phone: val(fd, "phone"), address: val(fd, "address"), addrDetail: val(fd, "addrDetail"), way: val(fd, "way"), memo: val(fd, "memo") };
         if (existing) Object.assign(existing, data);
@@ -1167,16 +1391,50 @@
   };
 
   // 연락 기록 추가 (전화·문자 버튼을 누르면 자동으로 "연락함"에 들어감)
-  const addAssign = (workerId, jobId, status) => {
+  const addAssign = (workerId, jobId, status, quiet = false) => {
     const j = job(jobId);
-    if (!j) return;
+    if (!j) return false;
     let a = state.assigns.find((x) => x.workerId === workerId && x.jobId === jobId);
-    if (status === "confirmed" && jobNeed(j) === 0 && a?.status !== "confirmed") { toast("인원이 이미 다 찼어요"); return; }
-    if (status === "confirmed" && busyFor(workerId, j)) { toast("같은 시간에 다른 일이 확정된 분이에요"); return; }
+    if (status === "confirmed" && jobNeed(j) === 0 && a?.status !== "confirmed") { if (!quiet) toast("인원이 이미 다 찼어요"); return false; }
+    if (status === "confirmed" && busyFor(workerId, j)) { if (!quiet) toast("같은 시간에 다른 일이 확정된 분이에요"); return false; }
     if (!a) { a = { id: uid(), jobId, workerId, status, outcome: "", fee: 0, rehire: false }; state.assigns.push(a); }
     else a.status = status;
     if (status !== "canceled") a.outcome = "";
     save();
+    return true;
+  };
+
+  // 확정: 여러 날 일감이면 "남은 날 모두 / 이 날만"을 물어봄
+  const confirmFlow = (workerId, jobId) => {
+    const j = job(jobId);
+    const w = worker(workerId);
+    if (!j || !w) return;
+    const later = groupOf(j).filter((x) => x.date > j.date);
+    if (!later.length) {
+      buzz();
+      if (addAssign(workerId, jobId, "confirmed")) toast("확정했어요. 확정 문자를 보내 주세요.");
+      render();
+      return;
+    }
+    const short = (x) => dateText(x.date).replace(/^(오늘|내일|어제) /, "");
+    openSheet({
+      title: `${w.name}님 확정`,
+      body: `<p>${groupOf(j).length}일 연속 일감이에요. 어떻게 확정할까요?</p><div class="choice-list">
+        <label class="choice"><input type="radio" name="scope" value="all" checked /><span><strong>남은 날 모두 확정</strong><small>${[j, ...later].map(short).join(", ")} (${later.length + 1}일)</small></span></label>
+        <label class="choice"><input type="radio" name="scope" value="one" /><span><strong>이 날만 확정</strong><small>${short(j)}</small></span></label></div>`,
+      submit: "확정",
+      onSubmit: (fd) => {
+        buzz();
+        const targets = val(fd, "scope") === "all" ? [j, ...later] : [j];
+        const ok = [];
+        const fail = [];
+        targets.forEach((x) => (addAssign(workerId, x.id, "confirmed", true) ? ok : fail).push(x));
+        render();
+        toast(fail.length
+          ? `${ok.length}일 확정했어요. ${fail.map(short).join(", ")}은 인원이 찼거나 시간이 겹쳐서 뺐어요`
+          : `${ok.length > 1 ? `${ok.length}일 모두 ` : ""}확정했어요. 확정 문자를 보내 주세요.`);
+      },
+    });
   };
 
   // ---------- 백업 ----------
@@ -1354,13 +1612,20 @@
       sheet.close();
       refresh();
     },
-    "add-assign": (el) => { if (el.dataset.v === "confirmed") buzz(); addAssign(el.dataset.worker, el.dataset.job, el.dataset.v); render(); toast(el.dataset.v === "confirmed" ? "확정했어요. 확정 문자를 보내 주세요." : "대기로 넣었어요"); },
+    "add-assign": (el) => {
+      if (el.dataset.v === "confirmed") { confirmFlow(el.dataset.worker, el.dataset.job); return; }
+      addAssign(el.dataset.worker, el.dataset.job, el.dataset.v); render(); toast("대기로 넣었어요");
+    },
     "contacted": (el) => {
       // 전화/문자 앱이 열린 뒤에 기록 (링크 동작을 막지 않음)
       const { worker: wId, job: jId } = el.dataset;
       if (!state.assigns.some((a) => a.workerId === wId && a.jobId === jId)) setTimeout(() => { addAssign(wId, jId, "asked"); render(); }, 400);
     },
-    "set-status": (el) => { if (el.dataset.v === "confirmed") buzz(); const a = assign(el.dataset.id); addAssign(a.workerId, a.jobId, el.dataset.v); render(); if (el.dataset.v === "confirmed" && assign(el.dataset.id).status === "confirmed") toast("확정했어요. 확정 문자를 보내 주세요."); },
+    "set-status": (el) => {
+      const a = assign(el.dataset.id);
+      if (el.dataset.v === "confirmed") { confirmFlow(a.workerId, a.jobId); return; }
+      addAssign(a.workerId, a.jobId, el.dataset.v); render();
+    },
     "remove-assign": (el) => { state.assigns = state.assigns.filter((a) => a.id !== el.dataset.id); refresh(); },
     "outcome": (el) => { buzz(); setOutcome(assign(el.dataset.id), el.dataset.v); render(); toast(el.dataset.v === "done" ? "출근으로 기록했어요" : "안 나옴으로 기록했어요"); },
     "cancel-ask": (el) => cancelAsk(assign(el.dataset.id)),
