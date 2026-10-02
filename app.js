@@ -2,7 +2,7 @@
   "use strict";
 
   // 앱 버전(APP_VERSION): 백업 화면에 표시. sw.js의 CACHE 이름과 같이 올림
-  const APP_VERSION = "v12";
+  const APP_VERSION = "v13";
   // 저장소 이름(KEY): 휴대폰 브라우저 안에 자료를 저장할 때 쓰는 이름
   const KEY = "dawon-mobile-v1";
   // 업무 종류(ROLES)
@@ -287,7 +287,7 @@
     const r = rest(j.restaurantId);
     const taken = new Set(assignsOf(j.id).map((a) => a.workerId));
     return ranked(state.workers.filter((w) => w.active !== false && !taken.has(w.id) && (w.roles || []).includes(j.role)))
-      .map((x) => ({ ...x, near: Boolean(r?.area && x.w.area && r.area.trim() === x.w.area.trim()), busy: busyFor(x.w.id, j) }))
+      .map((x) => ({ ...x, near: Boolean(r?.area && x.w.area && (r.area.includes(x.w.area.trim()) || x.w.area.includes(r.area.trim()))), busy: busyFor(x.w.id, j) }))
       .sort((x, y) => (x.busy - y.busy) || (x.t.level - y.t.level) || (Number(y.near) - Number(x.near)) || byPriority(x, y));
   };
   // 업무별 대기 순서에서 몇 번째인지 (재촉 전화 받을 때 확인용)
@@ -300,7 +300,7 @@
   const offerMsg = (j, w) => { const r = rest(j.restaurantId); return `[다원] ${w.name}님~ ${dateText(j.date)} ${j.start}~${j.end} ${r?.name || ""}${r?.area ? `(${r.area})` : ""} ${j.role} 일 있어요. 일당 ${won(j.pay)}. 가능하시면 연락 주세요 😊`; };
   // mapUrl: 네이버 지도 검색 주소 (주소가 없으면 식당 이름+지역으로 찾음). 누르면 지도 앱이나 지도 웹이 열림
   const mapUrl = (r) => {
-    const q = (r?.address || `${r?.name || ""} ${r?.area || ""}`).trim();
+    const q = (r?.address ? r.address.replace(/\s*\([^)]*\)\s*$/, "") : `${r?.name || ""} ${r?.area || ""}`).trim();
     return q ? `https://map.naver.com/p/search/${encodeURIComponent(q)}` : "";
   };
   // 확정 문자: 날짜·시간, 주소, 오시는 길, 지도 링크, 식당 전화를 한 줄씩
@@ -310,7 +310,7 @@
     return [
       `[다원] ${w.name}님 확정됐어요!`,
       `${dateText(j.date)} ${j.start}까지 ${r?.name || ""} 가시면 돼요.`,
-      r?.address ? `📍 주소: ${r.address}` : "",
+      r?.address ? `📍 주소: ${fullAddress(r)}` : "",
       r?.way ? `🚶 오시는 길: ${r.way}` : "",
       map ? `🗺 지도: ${map}` : "",
       r?.phone ? `☎ 식당 전화: ${r.phone}` : "",
@@ -586,7 +586,7 @@
         <div class="fact"><small>필요 인원</small><strong>${esc(j.headcount)}명</strong></div>
         <div class="fact"><small>지역</small><strong>${esc(r?.area || "-")}</strong></div>
       </div>
-      ${r?.address ? `<p class="meta-line">${icon("pin")}${esc(r.address)}</p>` : ""}
+      ${r?.address ? `<p class="meta-line">${icon("pin")}${esc(fullAddress(r))}</p>` : ""}
       ${r?.way ? `<p class="meta-line">${icon("walk")}${esc(r.way)}</p>` : ""}
       ${mapUrl(r) ? `<a class="map-link" href="${mapUrl(r)}" target="_blank" rel="noopener">${icon("pin")}지도 보기</a>` : ""}
       ${r && !r.address && !r.way ? `<button class="map-link" data-act="edit-rest" data-id="${r.id}">${icon("plus")}주소·오시는 길 넣기 (확정 문자에 들어가요)</button>` : ""}
@@ -790,7 +790,7 @@
       <div class="new-rest" ${rests.length ? "hidden" : ""}>
         <label class="field">식당 이름<input name="rName" autocomplete="off" /></label>
         <div class="two"><label class="field">지역<input name="rArea" placeholder="예: 종로" /></label><label class="field">전화<input name="rPhone" type="tel" inputmode="tel" /></label></div>
-        <label class="field">주소<input name="rAddress" placeholder="예: 서울 종로구 종로 123" /></label>
+        ${addressFields("r")}
         <label class="field">오시는 길<input name="rWay" placeholder="예: 종로3가역 5번 출구, 파리바게뜨 골목 2층" /></label>
       </div>
       <fieldset class="field"><legend>업무</legend>${roleChips("role", [j.role], false)}</fieldset>
@@ -810,6 +810,7 @@
       onReady: (form) => {
         const select = form.elements.restaurantId;
         const box = form.querySelector(".new-rest");
+        bindAddress(form, "r", form.elements.rArea);
         const payHint = () => { const n = Number(String(form.elements.pay.value).replace(/[^0-9]/g, "")); $("#pay-hint", form).textContent = n ? `${n.toLocaleString("ko-KR")}원 · 수수료 ${Math.round(n * state.feeRate / 100).toLocaleString("ko-KR")}원` : ""; };
         const syncNew = () => {
           const isNew = select.value === "__new";
@@ -838,7 +839,7 @@
       onSubmit: (fd) => {
         let restaurantId = val(fd, "restaurantId");
         if (restaurantId === "__new") {
-          const r = { id: uid(), name: val(fd, "rName"), area: val(fd, "rArea"), phone: val(fd, "rPhone"), address: val(fd, "rAddress"), way: val(fd, "rWay"), memo: "" };
+          const r = { id: uid(), name: val(fd, "rName"), area: val(fd, "rArea"), phone: val(fd, "rPhone"), address: val(fd, "rAddress"), addrDetail: val(fd, "rAddrDetail"), way: val(fd, "rWay"), memo: "" };
           state.restaurants.push(r);
           restaurantId = r.id;
         }
@@ -1028,21 +1029,87 @@
     });
   };
 
+  // ---------- 주소 검색 (카카오 우편번호 서비스: 가입·키 필요 없음) ----------
+  const POSTCODE_SRC = "https://t1.daumcdn.net/mapjsapi/bundle/postcode/prod/postcode.v2.js";
+  let postcodeLoading = null;
+  // 주소 검색 기능은 처음 쓸 때만 인터넷에서 불러옴
+  const loadPostcode = () => (postcodeLoading ||= new Promise((resolve, reject) => {
+    if (window.daum?.Postcode) { resolve(); return; }
+    const s = document.createElement("script");
+    s.src = POSTCODE_SRC;
+    s.onload = () => resolve();
+    s.onerror = () => { postcodeLoading = null; s.remove(); reject(new Error("load")); };
+    document.head.append(s);
+  }));
+  // 주소 칸 이름 (p가 "r"이면 rAddress·rAddrDetail, 없으면 address·addrDetail)
+  const addrName = (p, k) => (p ? p + k[0].toUpperCase() + k.slice(1) : k);
+  // 주소 칸 묶음: 누르면 검색이 열리는 주소 칸 + 상세 주소 칸 + 직접 입력
+  const addressFields = (p, r = {}) => `<div class="field addr-field">주소
+      <input name="${addrName(p, "address")}" class="addr-input" readonly placeholder="동·도로명·건물 이름으로 찾기" value="${esc(r.address || "")}" />
+      <input name="${addrName(p, "addrDetail")}" placeholder="상세 주소 (예: 2층, ○○빌딩 3층)" value="${esc(r.addrDetail || "")}" />
+      <span class="hint">확정 문자에 주소와 지도 링크로 들어가요 · <button type="button" class="link-inline" data-addr-manual>주소 직접 입력</button></span>
+    </div>`;
+  // 주소 칸에 검색 연결 (areaInput: 비어 있으면 '시·구'를 자동으로 채울 지역 칸)
+  const bindAddress = (form, p, areaInput) => {
+    const addr = form.elements[addrName(p, "address")];
+    const detail = form.elements[addrName(p, "addrDetail")];
+    const open = async () => {
+      if (!addr.readOnly) return; // 직접 입력 중이면 검색 안 띄움
+      if (!navigator.onLine) { toast("주소 검색은 인터넷이 필요해요. '주소 직접 입력'을 눌러 주세요."); return; }
+      const panel = document.createElement("div");
+      panel.className = "addr-search";
+      panel.innerHTML = `<div class="addr-head"><button type="button" class="back" aria-label="뒤로">‹</button><h2>주소 검색</h2></div>
+        <div class="addr-body"><p class="addr-tip">불러오는 중…</p></div>`;
+      form.classList.add("searching");
+      form.append(panel);
+      const close = () => { panel.remove(); form.classList.remove("searching"); };
+      panel.querySelector(".back").addEventListener("click", close);
+      try { await loadPostcode(); }
+      catch (_) { close(); toast("주소 검색을 불러오지 못했어요. '주소 직접 입력'을 눌러 주세요."); return; }
+      if (!panel.isConnected) return; // 불러오는 사이에 닫았으면 그만
+      const body = panel.querySelector(".addr-body");
+      body.innerHTML = "";
+      new window.daum.Postcode({
+        width: "100%",
+        height: "100%",
+        oncomplete: (d) => {
+          // 도로명 주소 + (법정동, 아파트 이름) — 예: 경상북도 구미시 낙동강변로 889 (신평동)
+          const base = d.roadAddress || d.jibunAddress || d.address;
+          const extra = [/[동로가]$/.test(d.bname || "") ? d.bname : "", d.apartment === "Y" ? d.buildingName : ""].filter(Boolean).join(", ");
+          addr.value = extra ? `${base} (${extra})` : base;
+          if (areaInput && !areaInput.value.trim()) areaInput.value = d.sigungu || d.sido || "";
+          close();
+          detail.focus();
+          toast("주소를 넣었어요. 상세 주소(층·호)를 적어 주세요");
+        },
+      }).embed(body, { autoClose: false });
+    };
+    addr.addEventListener("click", open);
+    form.querySelector("[data-addr-manual]").addEventListener("click", () => {
+      addr.readOnly = false;
+      addr.placeholder = "예: 서울 종로구 종로 123";
+      addr.focus();
+    });
+  };
+  // 주소 + 상세 주소를 한 줄로 (예: 경상북도 구미시 낙동강변로 889 (신평동), 2층)
+  const fullAddress = (r) => [r?.address, r?.addrDetail].filter(Boolean).join(", ");
+
   // 식당 등록 / 고치기
   const restForm = (existing) => {
-    const r = existing || { name: "", area: "", phone: "", address: "", way: "", memo: "" };
+    const r = existing || { name: "", area: "", phone: "", address: "", addrDetail: "", way: "", memo: "" };
     openSheet({
       title: existing ? "식당 정보" : "식당 등록",
       body: `${existing?.phone ? `<div class="btn-row" style="margin:0 0 16px"><a class="btn" href="${telHref(existing.phone)}">${icon("phone")}전화하기</a><a class="btn" href="${smsHref(existing.phone, "")}">${icon("message")}문자하기</a></div>` : ""}
         <label class="field">식당 이름<input name="name" required value="${esc(r.name)}" /></label>
         <div class="two"><label class="field">지역<input name="area" placeholder="예: 종로" value="${esc(r.area)}" /></label><label class="field">전화<input name="phone" type="tel" inputmode="tel" value="${esc(r.phone)}" /></label></div>
-        <label class="field">주소<input name="address" placeholder="예: 서울 종로구 종로 123" value="${esc(r.address)}" /><span class="hint">확정 문자의 지도 링크가 이 주소로 만들어져요</span></label>
+        ${addressFields("", r)}
         <label class="field">오시는 길<textarea name="way" rows="2" placeholder="예: 종로3가역 5번 출구로 나와서 파리바게뜨 끼고 골목 50m, 2층">${esc(r.way || "")}</textarea><span class="hint">구직자에게 보내는 확정 문자에 함께 들어가요</span></label>
         ${existing && mapUrl(existing) ? `<a class="btn" style="width:100%;margin:-4px 0 18px" href="${mapUrl(existing)}" target="_blank" rel="noopener">${icon("pin")}지도에서 위치 확인</a>` : ""}
         <label class="field">메모<textarea name="memo" rows="2" placeholder="예: 사장님이 조용한 분 선호">${esc(r.memo)}</textarea></label>
         ${existing ? `<button type="button" class="link-btn" data-act="del-rest" data-id="${existing.id}">이 식당 지우기</button>` : ""}`,
+      onReady: (form) => bindAddress(form, "", form.elements.area),
       onSubmit: (fd) => {
-        const data = { name: val(fd, "name"), area: val(fd, "area"), phone: val(fd, "phone"), address: val(fd, "address"), way: val(fd, "way"), memo: val(fd, "memo") };
+        const data = { name: val(fd, "name"), area: val(fd, "area"), phone: val(fd, "phone"), address: val(fd, "address"), addrDetail: val(fd, "addrDetail"), way: val(fd, "way"), memo: val(fd, "memo") };
         if (existing) Object.assign(existing, data);
         else state.restaurants.push({ id: uid(), ...data });
         refresh();
