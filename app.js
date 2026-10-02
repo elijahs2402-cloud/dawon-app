@@ -2,7 +2,7 @@
   "use strict";
 
   // 앱 버전(APP_VERSION): 백업 화면에 표시. sw.js의 CACHE 이름과 같이 올림
-  const APP_VERSION = "v11";
+  const APP_VERSION = "v12";
   // 저장소 이름(KEY): 휴대폰 브라우저 안에 자료를 저장할 때 쓰는 이름
   const KEY = "dawon-mobile-v1";
   // 업무 종류(ROLES)
@@ -39,6 +39,7 @@
     percent: '<path d="M19 5 5 19"/><circle cx="7" cy="7" r="2.5"/><circle cx="17" cy="17" r="2.5"/>',
     trash: '<path d="M4 7h16M9 7V4.5h6V7M6.5 7l1 13h9l1-13"/>',
     play: '<circle cx="12" cy="12" r="9"/><path d="M10 8.5v7l5.5-3.5z"/>',
+    walk: '<circle cx="13" cy="4.5" r="1.8"/><path d="M10 21l2-6 2.5 2.5V21M8 12l2.5-4.5h3l2 4 2.5 1M10.5 7.5 9 13l3 2"/>',
   };
   // icon("phone") → 선 아이콘. 두 번째 칸에 "fill"을 주면 속을 채움 (예: 하트)
   const icon = (name, cls = "") => `<svg class="ic ${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[name] || ""}</svg>`;
@@ -297,7 +298,25 @@
 
   // ---------- 문자 내용 ----------
   const offerMsg = (j, w) => { const r = rest(j.restaurantId); return `[다원] ${w.name}님~ ${dateText(j.date)} ${j.start}~${j.end} ${r?.name || ""}${r?.area ? `(${r.area})` : ""} ${j.role} 일 있어요. 일당 ${won(j.pay)}. 가능하시면 연락 주세요 😊`; };
-  const confirmMsg = (j, w) => { const r = rest(j.restaurantId); return `[다원] ${w.name}님 확정됐어요! ${dateText(j.date)} ${j.start}까지 ${r?.name || ""} 가시면 돼요.${r?.address ? ` 주소: ${r.address}.` : ""}${r?.phone ? ` 식당 전화: ${r.phone}.` : ""} 혹시 못 가시게 되면 꼭 미리 알려주세요 🙏`; };
+  // mapUrl: 네이버 지도 검색 주소 (주소가 없으면 식당 이름+지역으로 찾음). 누르면 지도 앱이나 지도 웹이 열림
+  const mapUrl = (r) => {
+    const q = (r?.address || `${r?.name || ""} ${r?.area || ""}`).trim();
+    return q ? `https://map.naver.com/p/search/${encodeURIComponent(q)}` : "";
+  };
+  // 확정 문자: 날짜·시간, 주소, 오시는 길, 지도 링크, 식당 전화를 한 줄씩
+  const confirmMsg = (j, w) => {
+    const r = rest(j.restaurantId);
+    const map = mapUrl(r);
+    return [
+      `[다원] ${w.name}님 확정됐어요!`,
+      `${dateText(j.date)} ${j.start}까지 ${r?.name || ""} 가시면 돼요.`,
+      r?.address ? `📍 주소: ${r.address}` : "",
+      r?.way ? `🚶 오시는 길: ${r.way}` : "",
+      map ? `🗺 지도: ${map}` : "",
+      r?.phone ? `☎ 식당 전화: ${r.phone}` : "",
+      "혹시 못 가시게 되면 꼭 미리 알려주세요 🙏",
+    ].filter(Boolean).join("\n");
+  };
   const restMsg = (j, w) => `[다원] 사장님, ${dateText(j.date)} ${j.role} ${w.name}님 보내드려요. ${j.start} 출근입니다.${w.phone ? ` 연락처: ${w.phone}` : ""}`;
   // 식당에 보내는 문자: 확정된 사람 수에 따라 내용이 달라짐
   const restJobMsg = (j) => {
@@ -568,6 +587,9 @@
         <div class="fact"><small>지역</small><strong>${esc(r?.area || "-")}</strong></div>
       </div>
       ${r?.address ? `<p class="meta-line">${icon("pin")}${esc(r.address)}</p>` : ""}
+      ${r?.way ? `<p class="meta-line">${icon("walk")}${esc(r.way)}</p>` : ""}
+      ${mapUrl(r) ? `<a class="map-link" href="${mapUrl(r)}" target="_blank" rel="noopener">${icon("pin")}지도 보기</a>` : ""}
+      ${r && !r.address && !r.way ? `<button class="map-link" data-act="edit-rest" data-id="${r.id}">${icon("plus")}주소·오시는 길 넣기 (확정 문자에 들어가요)</button>` : ""}
       ${j.memo ? `<p class="meta-line">${icon("note")}${esc(j.memo)}</p>` : ""}
       <div class="btn-row">${r?.phone
         ? `<a class="btn" href="${telHref(r.phone)}">${icon("phone")}식당 전화</a><a class="btn" href="${smsHref(r.phone, restJobMsg(j))}">${icon("message")}식당 문자</a>`
@@ -768,7 +790,8 @@
       <div class="new-rest" ${rests.length ? "hidden" : ""}>
         <label class="field">식당 이름<input name="rName" autocomplete="off" /></label>
         <div class="two"><label class="field">지역<input name="rArea" placeholder="예: 종로" /></label><label class="field">전화<input name="rPhone" type="tel" inputmode="tel" /></label></div>
-        <label class="field">주소<input name="rAddress" /></label>
+        <label class="field">주소<input name="rAddress" placeholder="예: 서울 종로구 종로 123" /></label>
+        <label class="field">오시는 길<input name="rWay" placeholder="예: 종로3가역 5번 출구, 파리바게뜨 골목 2층" /></label>
       </div>
       <fieldset class="field"><legend>업무</legend>${roleChips("role", [j.role], false)}</fieldset>
       <fieldset class="field"><legend>날짜</legend>
@@ -815,7 +838,7 @@
       onSubmit: (fd) => {
         let restaurantId = val(fd, "restaurantId");
         if (restaurantId === "__new") {
-          const r = { id: uid(), name: val(fd, "rName"), area: val(fd, "rArea"), phone: val(fd, "rPhone"), address: val(fd, "rAddress"), memo: "" };
+          const r = { id: uid(), name: val(fd, "rName"), area: val(fd, "rArea"), phone: val(fd, "rPhone"), address: val(fd, "rAddress"), way: val(fd, "rWay"), memo: "" };
           state.restaurants.push(r);
           restaurantId = r.id;
         }
@@ -1007,17 +1030,19 @@
 
   // 식당 등록 / 고치기
   const restForm = (existing) => {
-    const r = existing || { name: "", area: "", phone: "", address: "", memo: "" };
+    const r = existing || { name: "", area: "", phone: "", address: "", way: "", memo: "" };
     openSheet({
       title: existing ? "식당 정보" : "식당 등록",
       body: `${existing?.phone ? `<div class="btn-row" style="margin:0 0 16px"><a class="btn" href="${telHref(existing.phone)}">${icon("phone")}전화하기</a><a class="btn" href="${smsHref(existing.phone, "")}">${icon("message")}문자하기</a></div>` : ""}
         <label class="field">식당 이름<input name="name" required value="${esc(r.name)}" /></label>
         <div class="two"><label class="field">지역<input name="area" placeholder="예: 종로" value="${esc(r.area)}" /></label><label class="field">전화<input name="phone" type="tel" inputmode="tel" value="${esc(r.phone)}" /></label></div>
-        <label class="field">주소<input name="address" value="${esc(r.address)}" /></label>
+        <label class="field">주소<input name="address" placeholder="예: 서울 종로구 종로 123" value="${esc(r.address)}" /><span class="hint">확정 문자의 지도 링크가 이 주소로 만들어져요</span></label>
+        <label class="field">오시는 길<textarea name="way" rows="2" placeholder="예: 종로3가역 5번 출구로 나와서 파리바게뜨 끼고 골목 50m, 2층">${esc(r.way || "")}</textarea><span class="hint">구직자에게 보내는 확정 문자에 함께 들어가요</span></label>
+        ${existing && mapUrl(existing) ? `<a class="btn" style="width:100%;margin:-4px 0 18px" href="${mapUrl(existing)}" target="_blank" rel="noopener">${icon("pin")}지도에서 위치 확인</a>` : ""}
         <label class="field">메모<textarea name="memo" rows="2" placeholder="예: 사장님이 조용한 분 선호">${esc(r.memo)}</textarea></label>
         ${existing ? `<button type="button" class="link-btn" data-act="del-rest" data-id="${existing.id}">이 식당 지우기</button>` : ""}`,
       onSubmit: (fd) => {
-        const data = { name: val(fd, "name"), area: val(fd, "area"), phone: val(fd, "phone"), address: val(fd, "address"), memo: val(fd, "memo") };
+        const data = { name: val(fd, "name"), area: val(fd, "area"), phone: val(fd, "phone"), address: val(fd, "address"), way: val(fd, "way"), memo: val(fd, "memo") };
         if (existing) Object.assign(existing, data);
         else state.restaurants.push({ id: uid(), ...data });
         refresh();
