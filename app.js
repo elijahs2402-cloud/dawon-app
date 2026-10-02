@@ -2,7 +2,7 @@
   "use strict";
 
   // 앱 버전(APP_VERSION): 백업 화면에 표시. sw.js의 CACHE 이름과 같이 올림
-  const APP_VERSION = "v10";
+  const APP_VERSION = "v11";
   // 저장소 이름(KEY): 휴대폰 브라우저 안에 자료를 저장할 때 쓰는 이름
   const KEY = "dawon-mobile-v1";
   // 업무 종류(ROLES)
@@ -852,6 +852,11 @@
     // photoChange: 저장할 때 반영할 사진 변경 (undefined = 그대로, "" = 지우기, 그 밖 = 새 사진)
     let photoChange;
     const hasPhoto = Boolean(existing && photos.get(existing.id));
+    // 중복 확인: 같은 번호인 사람 (자기 자신은 빼고), 같은 이름인 사람
+    let allowDupId = ""; // "그래도 새로 등록"을 누른 상대 번호
+    const others = () => state.workers.filter((x) => x.id !== existing?.id);
+    const findPhoneDup = (phone) => others().find((x) => samePhone(x.phone, phone));
+    const findNameDup = (name) => name ? others().find((x) => x.name.trim() === name.trim()) : null;
     openSheet({
       title: existing ? "사람 정보 고치기" : "사람 등록",
       body: `${canPickContacts
@@ -868,6 +873,7 @@
         </div>
         <label class="field">이름<input name="name" required autocomplete="off" value="${esc(w.name)}" /></label>
         <label class="field">전화번호<input name="phone" type="tel" inputmode="tel" placeholder="010-0000-0000" value="${esc(w.phone)}" /></label>
+        <div id="dup-box"></div>
         <fieldset class="field"><legend>할 수 있는 일 <span class="hint" style="display:inline">여러 개 · 나중에 골라도 돼요</span></legend>${roleChips("roles", w.roles || [], true)}</fieldset>
         <label class="field">사는 곳 / 가능 지역<input name="area" placeholder="예: 종로" value="${esc(w.area)}" /></label>
         <label class="field">가입일<input name="joined" type="date" value="${esc(w.joined || "")}" /></label>
@@ -894,6 +900,38 @@
         }));
         clearBtn.addEventListener("click", () => { photoChange = ""; showPhoto(""); });
 
+        // 중복 알림 카드: 번호가 같으면 크게 알리고 그분 정보로 안내, 이름만 같으면 작게 알림
+        const dupBox = $("#dup-box", form);
+        const checkDup = () => {
+          const phoneVal = form.elements.phone.value;
+          const nameVal = form.elements.name.value.trim();
+          // 고치기에서 번호·이름을 그대로 두면 확인하지 않음 (예전에 '그래도 새로 등록'한 분도 막히지 않게)
+          const samePhoneAsBefore = existing && (samePhone(phoneVal, existing.phone) || (!digits(phoneVal) && !digits(existing.phone)));
+          const d = samePhoneAsBefore ? null : findPhoneDup(phoneVal);
+          const n = d || (existing && nameVal === existing.name.trim()) ? null : findNameDup(nameVal);
+          if (d) {
+            dupBox.innerHTML = `<div class="dup-card">
+              <div class="dup-head">${icon("alert")}이미 등록된 분이에요</div>
+              <div class="who">${avatar(d)}<div><strong>${esc(d.name)}</strong><div class="status-line">${esc([(d.roles || []).join("·") || "업무 미정", d.phone].filter(Boolean).join(" · "))}</div></div></div>
+              <button type="button" class="btn primary" data-open-dup="${d.id}">${icon("users")}그분 정보 보기</button>
+              ${allowDupId === d.id ? `<p class="hint" style="text-align:center">같은 번호지만 새로 등록하도록 표시했어요</p>` : `<button type="button" class="link-btn" data-allow-dup="${d.id}">그래도 새로 등록</button>`}
+            </div>`;
+          } else if (n) {
+            dupBox.innerHTML = `<div class="dup-soft">같은 이름이 있어요: <strong>${esc(n.name)}</strong>${n.phone ? ` (${esc(n.phone)})` : ""} <button type="button" class="link-btn" data-open-dup="${n.id}">보기</button></div>`;
+          } else dupBox.innerHTML = "";
+          return d;
+        };
+        form.elements.phone.addEventListener("input", checkDup);
+        form.elements.name.addEventListener("input", checkDup);
+        form.querySelector(".sheet-body").addEventListener("click", (e) => {
+          const open = e.target.closest("[data-open-dup]");
+          if (open) { sheet.close(); go({ name: "worker", id: open.dataset.openDup }); return; }
+          const allow = e.target.closest("[data-allow-dup]");
+          if (allow) { allowDupId = allow.dataset.allowDup; checkDup(); }
+        });
+        form._checkDup = checkDup; // 저장할 때도 씀
+        checkDup();
+
         // fillFromContact: 연락처 내용(이름 "김○○ 찬모", 번호, 사진)을 입력 칸에 채움. 두 가지 방법이 같이 씀
         const fillFromContact = async (fullName, phone, photoSrc) => {
           const parsed = parseContactName(fullName);
@@ -906,9 +944,10 @@
             const small = await shrinkImage(photoSrc);
             if (small) { photoChange = small; showPhoto(small); gotPhoto = true; }
           }
-          // 이미 등록된 번호면 알려줌 (두 번 등록 방지)
-          const dup = phone && state.workers.find((x) => x.id !== existing?.id && samePhone(x.phone, phone));
-          toast(dup ? `이미 등록된 번호예요: ${dup.name}님` : gotPhoto ? "연락처 정보와 사진을 넣었어요" : "연락처 정보를 넣었어요");
+          // 이미 등록된 분이면 알림 카드를 띄우고 그쪽으로 화면을 옮김 (두 번 등록 방지)
+          const dup = checkDup();
+          if (dup) { dupBox.scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth", block: "center" }); toast(`이미 등록된 분이에요: ${dup.name}님`); }
+          else toast(gotPhoto ? "연락처 정보와 사진을 넣었어요" : "연락처 정보를 넣었어요");
         };
 
         // 방법 1: 크롬 연락처 선택 창 (안드로이드)
@@ -942,7 +981,16 @@
           }
         });
       },
-      onSubmit: (fd) => {
+      onSubmit: (fd, form) => {
+        // 같은 번호가 이미 있으면 저장을 막고 알림 카드로 안내 ("그래도 새로 등록"을 눌렀으면 통과)
+        const dup = form._checkDup();
+        if (dup && allowDupId !== dup.id) {
+          const card = form.querySelector(".dup-card");
+          card.scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth", block: "center" });
+          card.classList.remove("flash"); void card.offsetWidth; card.classList.add("flash");
+          toast(`이미 등록된 분이에요. '그분 정보 보기'를 눌러 주세요`);
+          return false;
+        }
         // 업무는 골라도 되고 안 골라도 됨 (안 고르면 "업무 미정", 추천 순서에는 안 나옴)
         const roles = fd.getAll("roles").map(String);
         const data = { name: val(fd, "name"), phone: val(fd, "phone"), roles, area: val(fd, "area"), joined: val(fd, "joined"), memo: val(fd, "memo") };

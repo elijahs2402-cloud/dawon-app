@@ -315,6 +315,17 @@ legend { padding: 0; margin-bottom: 8px; font-weight: 700; font-size: .9rem; col
 .stepper .ic { width: 22px; height: 22px; }
 .avatar .ic { width: 30px; height: 30px; }
 
+/* ---------- 중복 알림 ---------- */
+.dup-card { background: var(--warn-soft); border-radius: 18px; padding: 16px; margin: -6px 0 20px; }
+.dup-head { display: flex; align-items: center; gap: 6px; margin-bottom: 12px; color: #8a4b00; font-weight: 800; }
+.dup-head .ic { width: 20px; height: 20px; }
+.dup-card .btn { width: 100%; margin-top: 14px; }
+.dup-card .link-btn { display: block; margin: 4px auto 0; }
+.dup-card.flash { animation: shake .42s var(--ease); }
+@keyframes shake { 0%, 100% { transform: none; } 20% { transform: translateX(-8px); } 40% { transform: translateX(7px); } 60% { transform: translateX(-4px); } 80% { transform: translateX(3px); } }
+.dup-soft { background: var(--fill); border-radius: 14px; padding: 10px 14px; margin: -6px 0 18px; font-size: .9rem; color: var(--sub); }
+.dup-soft .link-btn { padding: 0 4px; color: var(--pri); text-decoration: none; font-weight: 700; }
+
 /* ---------- 홈 맨 위 큰 요약 ---------- */
 .hero { padding: 6px 4px 22px; }
 .hero-date { margin: 0 0 6px; color: var(--sub); font-size: .95rem; font-weight: 600; }
