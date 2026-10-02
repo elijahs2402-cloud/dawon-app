@@ -124,6 +124,12 @@ p { margin: 0 0 8px; }
 .who[hidden] { display: none; }
 .avatar { width: 48px; height: 48px; border-radius: 50%; object-fit: cover; flex: none; display: inline-grid; place-items: center; background: #f5ede6; color: var(--muted); font-weight: 700; font-size: 1.1rem; }
 .avatar.big { width: 76px; height: 76px; font-size: 1.6rem; }
+.photo-edit { display: flex; align-items: center; gap: 14px; margin-bottom: 18px; }
+.photo-buttons { flex: 1; display: grid; gap: 8px; }
+.photo-buttons .btn { min-height: 46px; }
+.photo-buttons [hidden] { display: none; }
+.avatar-btn { background: none; border: 0; padding: 0; display: grid; justify-items: center; gap: 4px; font: inherit; color: var(--muted); cursor: pointer; flex: none; }
+.avatar-btn small { font-size: .75rem; }
 .pick-row { display: flex; align-items: center; gap: 12px; padding: 10px 4px; border-top: 1px solid var(--line); cursor: pointer; }
 .pick-row[hidden] { display: none; }
 .pick-row input { width: 24px; height: 24px; margin: 0; flex: none; accent-color: var(--pri); }

@@ -562,7 +562,7 @@
       <span class="small">${a.outcome ? outcomeText[a.outcome] : statusText[a.status]}${a.rehire ? " · ♥ 식당이 또 찾음" : ""}</span></li>`;
 
     return `<div class="card">
-      <div class="who">${avatar(w, "big")}<div>
+      <div class="who"><button class="avatar-btn" data-act="edit-worker" data-id="${w.id}" aria-label="사진 바꾸기">${avatar(w, "big")}<small>사진 바꾸기</small></button><div>
       <div class="name-line" style="font-size:1.35rem"><strong>${esc(w.name)}</strong>${badge(t)}${w.active === false ? `<span class="tag">숨김</span>` : ""}</div>
       <div class="status-line">${(w.roles || []).length ? esc(w.roles.join(" · ")) : `<span class="tag warn">업무 미정 · 고치기에서 골라 주세요</span>`}${w.area ? ` · ${esc(w.area)}` : ""}</div>
       <div class="status-line muted">${esc(w.phone || "전화번호 없음")}${w.joined ? ` · 가입 ${esc(w.joined)}` : ""}</div></div></div>
@@ -734,11 +734,20 @@
   // 사람 등록 / 고치기
   const workerForm = (existing) => {
     const w = existing || { name: "", phone: "", roles: [], area: "", memo: "", joined: today() };
-    let pickedPhoto = ""; // 연락처에서 가져온 사진 (저장할 때 넣음)
+    // photoChange: 저장할 때 반영할 사진 변경 (undefined = 그대로, "" = 지우기, 그 밖 = 새 사진)
+    let photoChange;
+    const hasPhoto = Boolean(existing && photos.get(existing.id));
     openSheet({
       title: existing ? "사람 정보 고치기" : "사람 등록",
       body: `${canPickContacts ? `<button type="button" class="btn big" data-pick-contact style="margin-bottom:16px">📇 연락처에서 고르기</button>` : ""}
-        <div class="who" id="picked-photo" ${existing && photos.get(existing.id) ? "" : "hidden"}>${existing ? avatar(existing, "big") : ""}<span class="muted small">사진</span></div>
+        <div class="photo-edit">
+          <span id="photo-preview">${existing ? avatar(existing, "big") : `<span class="avatar big" aria-hidden="true">📷</span>`}</span>
+          <div class="photo-buttons">
+            <label class="btn">📷 사진 찍기<input type="file" accept="image/*" capture="environment" data-photo-input hidden /></label>
+            <label class="btn">🖼️ 사진 불러오기<input type="file" accept="image/*" data-photo-input hidden /></label>
+            <button type="button" class="btn ghost" data-photo-clear ${hasPhoto ? "" : "hidden"}>사진 지우기</button>
+          </div>
+        </div>
         <label class="field">이름<input name="name" required autocomplete="off" value="${esc(w.name)}" /></label>
         <label class="field">전화번호<input name="phone" type="tel" inputmode="tel" placeholder="010-0000-0000" value="${esc(w.phone)}" /></label>
         <fieldset class="field"><legend>할 수 있는 일 (여러 개 고를 수 있어요)</legend>${roleChips("roles", w.roles || [], true)}</fieldset>
@@ -746,6 +755,26 @@
         <label class="field">가입일<input name="joined" type="date" value="${esc(w.joined || "")}" /></label>
         <label class="field">메모<textarea name="memo" rows="3" placeholder="예: 오전만 가능, 한식 경력 10년">${esc(w.memo)}</textarea></label>`,
       onReady: (form) => {
+        const preview = $("#photo-preview", form);
+        const clearBtn = form.querySelector("[data-photo-clear]");
+        // 미리보기 사진 바꾸기 (저장 전까지는 실제로 바뀌지 않음)
+        const showPhoto = (url) => {
+          preview.innerHTML = url ? `<img class="avatar big" src="${url}" alt="" />` : `<span class="avatar big" aria-hidden="true">📷</span>`;
+          clearBtn.hidden = !url;
+        };
+        form.querySelectorAll("[data-photo-input]").forEach((input) => input.addEventListener("change", async () => {
+          const file = input.files[0];
+          input.value = "";
+          if (!file) return;
+          const url = URL.createObjectURL(file);
+          const small = await shrinkImage(url);
+          URL.revokeObjectURL(url);
+          if (!small) { toast("이 사진은 열 수 없어요. 다른 사진을 골라 주세요."); return; }
+          photoChange = small;
+          showPhoto(small);
+          toast("사진을 넣었어요. 저장을 눌러 주세요.");
+        }));
+        clearBtn.addEventListener("click", () => { photoChange = ""; showPhoto(""); });
         const btn = form.querySelector("[data-pick-contact]");
         if (!btn) return;
         btn.addEventListener("click", async () => {
@@ -762,9 +791,9 @@
             const icon = c.icon?.[0];
             if (icon) {
               const url = URL.createObjectURL(icon);
-              pickedPhoto = await shrinkImage(url);
+              const small = await shrinkImage(url);
               URL.revokeObjectURL(url);
-              if (pickedPhoto) { const box = $("#picked-photo", form); box.hidden = false; box.innerHTML = `<img class="avatar big" src="${pickedPhoto}" alt="" /><span class="muted small">연락처 사진</span>`; }
+              if (small) { photoChange = small; showPhoto(small); }
             }
             toast(icon ? "연락처 정보와 사진을 넣었어요" : "연락처 정보를 넣었어요");
           } catch (_) {
@@ -779,7 +808,8 @@
         let id;
         if (existing) { Object.assign(existing, data); id = existing.id; toast("고쳤어요"); }
         else { id = uid(); state.workers.push({ id, active: true, ...data }); toast(`${data.name}님을 등록했어요`); }
-        if (pickedPhoto) setPhoto(id, pickedPhoto).then(render);
+        if (photoChange === "") removePhoto(id);
+        else if (photoChange) setPhoto(id, photoChange).then(render);
         refresh();
       },
     });

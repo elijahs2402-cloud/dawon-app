@@ -1,6 +1,6 @@
 // 서비스 워커(service worker): 인터넷이 없어도 앱 화면이 열리도록 파일을 저장해 두는 역할
 // 앱 파일을 고치면 아래 버전(CACHE) 이름을 바꿔야 휴대폰에 새 버전이 반영됨
-const CACHE = "dawon-v3";
+const CACHE = "dawon-v4";
 const FILES = ["./", "./index.html", "./styles.css", "./app.js", "./manifest.webmanifest", "./icon-192.png", "./icon-512.png"];
 
 self.addEventListener("install", (e) => {
