@@ -128,6 +128,15 @@
   const offerMsg = (j, w) => { const r = rest(j.restaurantId); return `[다원] ${w.name}님~ ${dateText(j.date)} ${j.start}~${j.end} ${r?.name || ""}${r?.area ? `(${r.area})` : ""} ${j.role} 일 있어요. 일당 ${won(j.pay)}. 가능하시면 연락 주세요 😊`; };
   const confirmMsg = (j, w) => { const r = rest(j.restaurantId); return `[다원] ${w.name}님 확정됐어요! ${dateText(j.date)} ${j.start}까지 ${r?.name || ""} 가시면 돼요.${r?.address ? ` 주소: ${r.address}.` : ""}${r?.phone ? ` 식당 전화: ${r.phone}.` : ""} 혹시 못 가시게 되면 꼭 미리 알려주세요 🙏`; };
   const restMsg = (j, w) => `[다원] 사장님, ${dateText(j.date)} ${j.role} ${w.name}님 보내드려요. ${j.start} 출근입니다.${w.phone ? ` 연락처: ${w.phone}` : ""}`;
+  // 식당에 보내는 문자: 확정된 사람 수에 따라 내용이 달라짐
+  const restJobMsg = (j) => {
+    const names = confirmedOf(j).map((a) => worker(a.workerId)?.name).filter(Boolean).map((n) => `${n}님`);
+    const need = jobNeed(j);
+    const head = `[다원] 사장님, ${dateText(j.date)} ${j.role}`;
+    if (!names.length) return `${head} ${j.headcount}명 요청 잘 받았어요. 사람 구해지면 바로 연락드릴게요 😊`;
+    if (need) return `${head} ${names.join(", ")} 먼저 보내드려요. ${j.start} 출근입니다. 나머지 ${need}명도 구해지면 바로 연락드릴게요.`;
+    return `${head} ${names.join(", ")} 보내드려요. ${j.start} 출근입니다.`;
+  };
   const standbyMsg = (j, w) => `[다원] ${w.name}님, ${dateText(j.date)} ${restName(j)} ${j.role} 대기 부탁드려요. 빈자리 생기면 바로 연락드릴게요. 대기해 주시면 다음 일 먼저 챙겨드려요 😊`;
 
   // ---------- 알림(토스트) ----------
@@ -352,7 +361,9 @@
       </div>
       ${r?.address ? `<p class="small">📍 ${esc(r.address)}</p>` : ""}
       ${j.memo ? `<p class="small">📝 ${esc(j.memo)}</p>` : ""}
-      <div class="btn-row">${r?.phone ? `<a class="btn" href="${telHref(r.phone)}">📞 식당 전화</a>` : ""}<button class="btn" data-act="edit-job" data-id="${j.id}">고치기</button></div>
+      <div class="btn-row">${r?.phone
+        ? `<a class="btn" href="${telHref(r.phone)}">📞 식당 전화</a><a class="btn" href="${smsHref(r.phone, restJobMsg(j))}">💬 식당 문자</a>`
+        : r ? `<button class="btn" data-act="edit-rest" data-id="${r.id}">식당 전화번호 넣기</button>` : ""}<button class="btn" data-act="edit-job" data-id="${j.id}">고치기</button></div>
     </div>`;
 
     if (need && standby.length) html += `<div class="banner need">대기 중인 분이 ${standby.length}명 있어요. 아래에서 바로 <strong>확정</strong>하세요.</div>`;
@@ -602,7 +613,7 @@
     const r = existing || { name: "", area: "", phone: "", address: "", memo: "" };
     openSheet({
       title: existing ? "식당 정보" : "식당 등록",
-      body: `${existing?.phone ? `<a class="btn big" style="margin-bottom:16px" href="${telHref(existing.phone)}">📞 ${esc(existing.phone)} 전화하기</a>` : ""}
+      body: `${existing?.phone ? `<div class="btn-row" style="margin:0 0 16px"><a class="btn" href="${telHref(existing.phone)}">📞 전화하기</a><a class="btn" href="${smsHref(existing.phone, "")}">💬 문자하기</a></div>` : ""}
         <label class="field">식당 이름<input name="name" required value="${esc(r.name)}" /></label>
         <div class="two"><label class="field">지역<input name="area" placeholder="예: 종로" value="${esc(r.area)}" /></label><label class="field">전화<input name="phone" type="tel" inputmode="tel" value="${esc(r.phone)}" /></label></div>
         <label class="field">주소<input name="address" value="${esc(r.address)}" /></label>
