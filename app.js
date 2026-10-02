@@ -170,7 +170,7 @@
       if (/QUOTED-PRINTABLE/.test(params)) value = qpDecode(value, (params.match(/CHARSET=([^;:]+)/) || [])[1]);
       if (prop === "FN") cur.fn = vUnescape(value);
       else if (prop === "N") { const p = value.split(";").map(vUnescape); cur.n = `${p[0] || ""}${p[1] || ""}`.trim(); }
-      else if (prop === "TEL") cur.tels.push({ num: value.trim(), cell: /CELL/.test(params) });
+      else if (prop === "TEL") cur.tels.push({ num: value.trim(), cell: /CELL/.test(params), pref: /PREF/.test(params) });
       else if (prop === "PHOTO") {
         const v = value.replace(/\s/g, "");
         if (v.startsWith("data:")) cur.photo = v;
@@ -179,7 +179,9 @@
     }
     return cards.map((c) => {
       const full = c.fn || c.n;
-      const tel = (c.tels.find((t) => t.cell) || c.tels[0] || {}).num || "";
+      // 번호 고르는 순서: 기본(pref) 휴대폰 → 휴대전화(CELL) → 010 등 휴대폰 번호 → 첫 번호
+      const mobile = (t) => normPhone(t.num).startsWith("01");
+      const tel = (c.tels.find((t) => t.pref && mobile(t)) || c.tels.find((t) => t.cell) || c.tels.find(mobile) || c.tels[0] || {}).num || "";
       return { full, phone: normPhone(tel), photo: c.photo, ...parseContactName(full) };
     }).filter((c) => c.full && c.phone);
   };
@@ -739,7 +741,10 @@
     const hasPhoto = Boolean(existing && photos.get(existing.id));
     openSheet({
       title: existing ? "사람 정보 고치기" : "사람 등록",
-      body: `${canPickContacts ? `<button type="button" class="btn big" data-pick-contact style="margin-bottom:16px">📇 연락처에서 고르기</button>` : ""}
+      body: `${canPickContacts
+          ? `<button type="button" class="btn big" data-pick-contact style="margin-bottom:16px">📇 연락처에서 고르기</button>`
+          : `<label class="btn big" style="margin-bottom:6px">📇 연락처 파일로 불러오기<input type="file" accept=".vcf,text/vcard,text/x-vcard,text/directory" data-vcf-one hidden /></label>
+             <p class="hint" style="margin:0 0 16px">연락처 앱에서 한 사람을 골라 <strong>공유 → 파일로 저장</strong>한 뒤, 이 버튼으로 그 파일을 고르세요.</p>`}
         <div class="photo-edit">
           <span id="photo-preview">${existing ? avatar(existing, "big") : `<span class="avatar big" aria-hidden="true">📷</span>`}</span>
           <div class="photo-buttons">
@@ -775,29 +780,52 @@
           toast("사진을 넣었어요. 저장을 눌러 주세요.");
         }));
         clearBtn.addEventListener("click", () => { photoChange = ""; showPhoto(""); });
-        const btn = form.querySelector("[data-pick-contact]");
-        if (!btn) return;
-        btn.addEventListener("click", async () => {
+
+        // fillFromContact: 연락처 내용(이름 "김○○ 찬모", 번호, 사진)을 입력 칸에 채움. 두 가지 방법이 같이 씀
+        const fillFromContact = async (fullName, phone, photoSrc) => {
+          const parsed = parseContactName(fullName);
+          form.elements.name.value = parsed.name;
+          if (phone) form.elements.phone.value = normPhone(phone);
+          form.querySelectorAll("input[name=roles]").forEach((i) => { if (parsed.roles.includes(i.value)) i.checked = true; });
+          if (parsed.extra && !form.elements.memo.value) form.elements.memo.value = parsed.extra;
+          let gotPhoto = false;
+          if (photoSrc) {
+            const small = await shrinkImage(photoSrc);
+            if (small) { photoChange = small; showPhoto(small); gotPhoto = true; }
+          }
+          // 이미 등록된 번호면 알려줌 (두 번 등록 방지)
+          const dup = phone && state.workers.find((x) => x.id !== existing?.id && samePhone(x.phone, phone));
+          toast(dup ? `⚠ 이미 등록된 번호예요: ${dup.name}님` : gotPhoto ? "연락처 정보와 사진을 넣었어요" : "연락처 정보를 넣었어요");
+        };
+
+        // 방법 1: 크롬 연락처 선택 창 (안드로이드)
+        form.querySelector("[data-pick-contact]")?.addEventListener("click", async () => {
           try {
             const supported = await navigator.contacts.getProperties();
             const props = ["name", "tel", ...(supported.includes("icon") ? ["icon"] : [])];
             const [c] = await navigator.contacts.select(props, { multiple: false });
             if (!c) return;
-            const parsed = parseContactName((c.name || [])[0] || "");
-            form.elements.name.value = parsed.name;
-            if (c.tel?.[0]) form.elements.phone.value = normPhone(c.tel[0]);
-            form.querySelectorAll("input[name=roles]").forEach((i) => { if (parsed.roles.includes(i.value)) i.checked = true; });
-            if (parsed.extra && !form.elements.memo.value) form.elements.memo.value = parsed.extra;
             const icon = c.icon?.[0];
-            if (icon) {
-              const url = URL.createObjectURL(icon);
-              const small = await shrinkImage(url);
-              URL.revokeObjectURL(url);
-              if (small) { photoChange = small; showPhoto(small); }
-            }
-            toast(icon ? "연락처 정보와 사진을 넣었어요" : "연락처 정보를 넣었어요");
+            const url = icon ? URL.createObjectURL(icon) : "";
+            await fillFromContact((c.name || [])[0] || "", c.tel?.[0] || "", url);
+            if (url) URL.revokeObjectURL(url);
           } catch (_) {
             toast("연락처를 가져오지 못했어요. 직접 입력해 주세요.");
+          }
+        });
+
+        // 방법 2: 연락처 파일(.vcf) 한 개 고르기 (아이폰 등)
+        form.querySelector("[data-vcf-one]")?.addEventListener("change", async (e) => {
+          const file = e.target.files[0];
+          e.target.value = "";
+          if (!file) return;
+          try {
+            const list = parseVcf(await file.text());
+            if (!list.length) { toast("전화번호가 있는 연락처를 찾지 못했어요."); return; }
+            await fillFromContact(list[0].full, list[0].phone, list[0].photo);
+            if (list.length > 1) toast(`파일에 ${list.length}명이 있어서 첫 번째 분만 넣었어요. 여러 명은 백업 화면에서 불러오세요.`);
+          } catch (_) {
+            toast("연락처 파일을 읽지 못했어요.");
           }
         });
       },
