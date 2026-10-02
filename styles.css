@@ -238,6 +238,8 @@ legend { padding: 0; margin-bottom: 6px; font-weight: 600; }
   transition: opacity .2s, transform .2s;
 }
 #toast.show { opacity: 1; transform: translate(-50%, 0); }
+/* 입력창 안에 있을 때는 아래 저장 버튼 위에 뜨게 */
+#sheet #toast { bottom: calc(96px + env(safe-area-inset-bottom)); }
 
 .danger-zone { margin-top: 30px; }
 .link-btn { background: none; border: 0; color: var(--bad); font: inherit; font-weight: 600; text-decoration: underline; padding: 8px 0; cursor: pointer; }

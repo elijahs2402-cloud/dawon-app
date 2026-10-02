@@ -277,6 +277,9 @@
   let toastTimer;
   const toast = (msg) => {
     const box = $("#toast");
+    // 입력창이 열려 있으면 안내 글을 입력창 안으로 옮겨서 가려지지 않게 함
+    const host = $("#sheet").open ? $("#sheet") : document.body;
+    if (box.parentElement !== host) host.append(box);
     box.textContent = msg;
     box.classList.add("show");
     clearTimeout(toastTimer);
@@ -320,6 +323,8 @@
       input.value = Math.min(20, Math.max(1, (Number(input.value) || 1) + Number(step.dataset.step)));
     }
   });
+  // 입력창이 닫히면 안내 글을 원래 자리로 돌려놓음 (닫힌 뒤에도 보이게)
+  sheet.addEventListener("close", () => document.body.append($("#toast")));
   // 바깥 어두운 부분을 누르면 닫기
   sheet.addEventListener("click", (e) => { if (e.target === sheet) sheet.close(); });
 
@@ -755,7 +760,7 @@
         </div>
         <label class="field">이름<input name="name" required autocomplete="off" value="${esc(w.name)}" /></label>
         <label class="field">전화번호<input name="phone" type="tel" inputmode="tel" placeholder="010-0000-0000" value="${esc(w.phone)}" /></label>
-        <fieldset class="field"><legend>할 수 있는 일 (여러 개 고를 수 있어요)</legend>${roleChips("roles", w.roles || [], true)}</fieldset>
+        <fieldset class="field"><legend>할 수 있는 일 <span class="hint" style="display:inline">여러 개 · 나중에 골라도 돼요</span></legend>${roleChips("roles", w.roles || [], true)}</fieldset>
         <label class="field">사는 곳 / 가능 지역<input name="area" placeholder="예: 종로" value="${esc(w.area)}" /></label>
         <label class="field">가입일<input name="joined" type="date" value="${esc(w.joined || "")}" /></label>
         <label class="field">메모<textarea name="memo" rows="3" placeholder="예: 오전만 가능, 한식 경력 10년">${esc(w.memo)}</textarea></label>`,
@@ -830,12 +835,13 @@
         });
       },
       onSubmit: (fd) => {
+        // 업무는 골라도 되고 안 골라도 됨 (안 고르면 "업무 미정", 추천 순서에는 안 나옴)
         const roles = fd.getAll("roles").map(String);
-        if (!roles.length) { toast("할 수 있는 일을 하나 이상 골라 주세요"); return false; }
         const data = { name: val(fd, "name"), phone: val(fd, "phone"), roles, area: val(fd, "area"), joined: val(fd, "joined"), memo: val(fd, "memo") };
+        const later = roles.length ? "" : " · 업무를 고르면 추천 순서에 나와요";
         let id;
-        if (existing) { Object.assign(existing, data); id = existing.id; toast("고쳤어요"); }
-        else { id = uid(); state.workers.push({ id, active: true, ...data }); toast(`${data.name}님을 등록했어요`); }
+        if (existing) { Object.assign(existing, data); id = existing.id; toast(`고쳤어요${later}`); }
+        else { id = uid(); state.workers.push({ id, active: true, ...data }); toast(`${data.name}님을 등록했어요${later}`); }
         if (photoChange === "") removePhoto(id);
         else if (photoChange) setPhoto(id, photoChange).then(render);
         refresh();
