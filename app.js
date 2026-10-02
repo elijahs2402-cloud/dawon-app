@@ -549,6 +549,8 @@
     const isW = ui.peopleMode === "workers";
     return `<div class="segment"><button class="${isW ? "active" : ""}" data-act="people-mode" data-v="workers">구직자 ${state.workers.length}</button><button class="${isW ? "" : "active"}" data-act="people-mode" data-v="restaurants">식당 ${state.restaurants.length}</button></div>
       <button class="btn primary big" data-act="${isW ? "new-worker" : "new-rest"}">＋ ${isW ? "사람 등록" : "식당 등록"}</button>
+      ${isW ? `<button class="btn big" style="margin-top:10px" data-act="import-vcf">📇 연락처 한 번에 불러오기</button>
+        <p class="hint" style="margin-top:6px">연락처 앱에서 <strong>내보내기</strong>로 만든 .vcf 파일을 골라요. 자세한 방법은 백업 화면에 있어요.</p>` : ""}
       <input id="people-q" class="search" style="margin-top:14px" type="search" placeholder="${isW ? "이름·지역·전화번호로 찾기" : "식당 이름·지역으로 찾기"}" value="${esc(ui.peopleQuery)}" />
       ${isW ? `<div class="chips filter-chips">${["", ...ROLES].map((r) => `<button class="${ui.peopleRole === r ? "active" : ""}" data-act="role-filter" data-v="${r}">${r || "전체"}</button>`).join("")}</div>` : ""}
       <div id="people-list">${peopleList()}</div>`;
