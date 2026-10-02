@@ -3,10 +3,13 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-    <meta name="theme-color" content="#c2410c" />
+    <meta name="theme-color" content="#f2f4f6" />
     <title>다원 소개소</title>
     <link rel="manifest" href="manifest.webmanifest" />
     <link rel="icon" href="icon-192.png" />
+    <!-- 글꼴: Pretendard (무료 공개 글꼴, 필요한 글자만 받음. 못 받으면 휴대폰 기본 글꼴) -->
+    <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css" crossorigin />
     <link rel="stylesheet" href="styles.css" />
     <script src="app.js" defer></script>
   </head>
@@ -20,13 +23,23 @@
     <!-- 화면 내용이 여기에 그려짐 -->
     <main id="screen"></main>
 
-    <!-- 아래쪽 메뉴 -->
+    <!-- 아래쪽 메뉴 (선 아이콘) -->
     <nav class="tabbar" aria-label="메뉴">
-      <button type="button" data-tab="home"><span aria-hidden="true">🏠</span>홈</button>
-      <button type="button" data-tab="jobs"><span aria-hidden="true">📋</span>일감</button>
-      <button type="button" data-tab="people"><span aria-hidden="true">👥</span>사람</button>
-      <button type="button" data-tab="scripts"><span aria-hidden="true">💬</span>문자</button>
-      <button type="button" data-tab="more"><span aria-hidden="true">💾</span>백업</button>
+      <button type="button" data-tab="home">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z"/></svg>홈
+      </button>
+      <button type="button" data-tab="jobs">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="4" width="14" height="17" rx="2"/><path d="M9 4V3h6v1M9 10h6M9 14h6M9 18h3"/></svg>일감
+      </button>
+      <button type="button" data-tab="people">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.6-3.4 3.3-5.5 6.5-5.5s5.9 2.1 6.5 5.5"/><path d="M16 4.6a3.5 3.5 0 0 1 0 6.8M18 14.8c1.8.8 3.1 2.6 3.5 5.2"/></svg>사람
+      </button>
+      <button type="button" data-tab="scripts">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 5h16a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1h-9l-5 4v-4H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1z"/><path d="M8 10h8M8 13h5"/></svg>문자
+      </button>
+      <button type="button" data-tab="more">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16v12a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1z"/><path d="M3 4h18v3H3zM10 11h4"/></svg>백업
+      </button>
     </nav>
 
     <!-- 입력창(아래에서 올라오는 창) -->
