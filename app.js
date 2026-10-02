@@ -2,7 +2,7 @@
   "use strict";
 
   // 앱 버전(APP_VERSION): 백업 화면에 표시. sw.js의 CACHE 이름과 같이 올림
-  const APP_VERSION = "v9";
+  const APP_VERSION = "v10";
   // 저장소 이름(KEY): 휴대폰 브라우저 안에 자료를 저장할 때 쓰는 이름
   const KEY = "dawon-mobile-v1";
   // 업무 종류(ROLES)
@@ -12,6 +12,41 @@
   const $ = (selector, root = document) => root.querySelector(selector);
   // esc: 화면에 글자를 안전하게 넣기 위한 변환
   const esc = (value) => String(value ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+  // ---------- 선 아이콘 ----------
+  // 이모지 대신 쓰는 아이콘 모음 (그림 파일 없이 코드로 그림, 글자색을 따라감)
+  const ICONS = {
+    phone: '<path d="M5.5 3.5h3l1.8 4.6-2.2 1.4a11.5 11.5 0 0 0 6.4 6.4l1.4-2.2 4.6 1.8v3a2 2 0 0 1-2.2 2A17 17 0 0 1 3.5 5.7a2 2 0 0 1 2-2.2z"/>',
+    message: '<path d="M4 4.5h16a1 1 0 0 1 1 1v10.5a1 1 0 0 1-1 1h-8.5L7 20.5V17H4a1 1 0 0 1-1-1V5.5a1 1 0 0 1 1-1z"/>',
+    check: '<path d="M5 12.5l4.5 4.5L19 7.5"/>',
+    x: '<path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/>',
+    alert: '<path d="M12 4 3 19.5h18z"/><path d="M12 10v4.5M12 17.2v.01"/>',
+    plus: '<path d="M12 5v14M5 12h14"/>',
+    minus: '<path d="M5 12h14"/>',
+    contacts: '<rect x="5" y="3" width="15" height="18" rx="2.5"/><circle cx="12.5" cy="10" r="2.5"/><path d="M8.5 17c.6-1.9 2.1-3 4-3s3.4 1.1 4 3M3 7.5h3M3 12h3M3 16.5h3"/>',
+    camera: '<path d="M4 7.5h3l2-2.5h6l2 2.5h3a1 1 0 0 1 1 1V19a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V8.5a1 1 0 0 1 1-1z"/><circle cx="12" cy="13.2" r="3.5"/>',
+    image: '<rect x="3" y="4" width="18" height="16" rx="2.5"/><circle cx="8.5" cy="9.5" r="1.6"/><path d="m21 15.5-5-5L6.5 20"/>',
+    download: '<path d="M12 4v11M7.5 10.5 12 15l4.5-4.5M5 20h14"/>',
+    folder: '<path d="M3 7a1 1 0 0 1 1-1h5l2 2h9a1 1 0 0 1 1 1v9.5a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z"/>',
+    pin: '<path d="M12 21s7-6.2 7-11.5a7 7 0 0 0-14 0C5 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/>',
+    note: '<rect x="5" y="3.5" width="14" height="17" rx="2"/><path d="M9 8.5h6M9 12.5h6M9 16.5h3"/>',
+    heart: '<path d="M12 20s-7.5-4.6-7.5-10A4.3 4.3 0 0 1 12 7.4 4.3 4.3 0 0 1 19.5 10c0 5.4-7.5 10-7.5 10z"/>',
+    send: '<path d="M20.5 3.5 10 14M20.5 3.5 14 20.5l-4-6.5-6.5-4z"/>',
+    copy: '<rect x="8.5" y="8.5" width="11.5" height="11.5" rx="2"/><path d="M15.5 8.5V5a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v9.5a1 1 0 0 0 1 1h3.5"/>',
+    edit: '<path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M13.5 6.5l4 4"/>',
+    undo: '<path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/>',
+    users: '<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.6-3.4 3.3-5.5 6.5-5.5s5.9 2.1 6.5 5.5"/><path d="M16 4.6a3.5 3.5 0 0 1 0 6.8M18 14.8c1.8.8 3.1 2.6 3.5 5.2"/>',
+    home: '<path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z"/>',
+    percent: '<path d="M19 5 5 19"/><circle cx="7" cy="7" r="2.5"/><circle cx="17" cy="17" r="2.5"/>',
+    trash: '<path d="M4 7h16M9 7V4.5h6V7M6.5 7l1 13h9l1-13"/>',
+    play: '<circle cx="12" cy="12" r="9"/><path d="M10 8.5v7l5.5-3.5z"/>',
+  };
+  // icon("phone") → 선 아이콘. 두 번째 칸에 "fill"을 주면 속을 채움 (예: 하트)
+  const icon = (name, cls = "") => `<svg class="ic ${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[name] || ""}</svg>`;
+  // 움직임을 줄이는 설정을 켠 휴대폰인지
+  const reduceMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+  // 짧은 진동 (안드로이드만, 아이폰은 조용히 무시)
+  const buzz = () => { try { navigator.vibrate?.(12); } catch (_) {} };
+
   // uid: 겹치지 않는 번호 만들기
   const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
   const ymd = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
@@ -233,7 +268,7 @@
     return { level: 1, label: "신규", cls: "new" };
   };
   const badge = (t) => `<span class="badge ${t.cls}">${t.label}</span>`;
-  const statLine = (s) => `✔${s.done} ⚠${s.late} ✖${s.noshow}${s.rehire ? ` ♥${s.rehire}` : ""}`;
+  const statLine = (s) => `<span class="stats">${icon("check")}${s.done}${icon("alert")}${s.late}${icon("x")}${s.noshow}${s.rehire ? `${icon("heart", "fill")}${s.rehire}` : ""}</span>`;
   // 순서 정하기: 믿음직 → 보통 → 주의, 같으면 오래 쉰 사람 먼저
   const byPriority = (x, y) => (x.t.level - y.t.level) || (x.s.lastWork || "").localeCompare(y.s.lastWork || "") || x.w.name.localeCompare(y.w.name, "ko");
   const ranked = (list) => list.map((w) => { const s = statsOf(w.id); return { w, s, t: trustOf(s) }; });
@@ -303,12 +338,29 @@
   const sheet = $("#sheet");
   const sheetForm = $("#sheet-form");
   let sheetSubmit = null;
+  // 입력창이 닫힐 때 아래로 미끄러져 내려가게 함 (원래 닫기 기능을 감싸서 사용)
+  const nativeClose = HTMLDialogElement.prototype.close;
+  let closeTimer = null;
+  sheet.close = function () {
+    if (!this.open || closeTimer) return;
+    if (reduceMotion) { nativeClose.call(this); return; }
+    this.classList.add("closing");
+    closeTimer = setTimeout(() => {
+      closeTimer = null;
+      this.classList.remove("closing");
+      nativeClose.call(this);
+    }, 200);
+  };
+  // 휴대폰 뒤로 가기·Esc로 닫을 때도 같은 움직임
+  sheet.addEventListener("cancel", (e) => { e.preventDefault(); sheet.close(); });
   const openSheet = ({ title, body, submit = "저장", onSubmit, onReady }) => {
-    sheetForm.innerHTML = `<div class="sheet-head"><h2>${esc(title)}</h2><button type="button" class="icon-btn" data-close aria-label="닫기">✕</button></div>
+    // 닫히는 중에 새 창을 열면 닫기를 취소하고 내용만 바꿈
+    if (closeTimer) { clearTimeout(closeTimer); closeTimer = null; sheet.classList.remove("closing"); }
+    sheetForm.innerHTML = `<div class="sheet-head"><h2>${esc(title)}</h2><button type="button" class="icon-btn" data-close aria-label="닫기">${icon("x")}</button></div>
       <div class="sheet-body">${body}</div>
       <div class="sheet-foot"><button type="button" class="btn ghost" data-close>닫기</button>${onSubmit ? `<button type="submit" class="btn primary">${esc(submit)}</button>` : ""}</div>`;
     sheetSubmit = onSubmit || null;
-    sheet.showModal();
+    if (!sheet.open) sheet.showModal();
     sheetForm.querySelector(".sheet-body").scrollTop = 0;
     onReady?.(sheetForm);
   };
@@ -332,15 +384,21 @@
 
   // ---------- 화면 이동 ----------
   let route = { name: "home" };
+  // navDir: 화면 움직임 방향 (forward = 오른쪽에서 들어옴, back = 왼쪽에서, tab = 아래에서 차례로). 처음 열 때는 tab
+  let navDir = "tab";
+  const isDetail = (r) => r.name === "job" || r.name === "worker";
   const ui = { peopleMode: "workers", peopleQuery: "", peopleRole: "", jobsMode: "upcoming", showAll: {} };
   const go = (next) => {
+    navDir = isDetail(next) ? "forward" : "tab";
     route = next;
     history.pushState(next, "");
     render();
     window.scrollTo(0, 0);
   };
   window.addEventListener("popstate", (e) => {
+    const prev = route;
     route = e.state || { name: "home" };
+    navDir = isDetail(prev) ? "back" : "tab";
     if (sheet.open) sheet.close();
     render();
   });
@@ -371,9 +429,9 @@
       <div class="who">${avatar(w)}<div><button class="name-link" data-act="open-worker" data-id="${w.id}">${esc(w.name)}</button>
       <div class="muted small">${esc(dateText(j.date))} · ${esc(restName(j))} ${esc(j.role)}</div></div></div>
       <div class="btn-row three">
-        <button class="btn ok" data-act="outcome" data-id="${a.id}" data-v="done">✔ 출근함</button>
-        <button class="btn warn" data-act="cancel-ask" data-id="${a.id}">⚠ 취소</button>
-        <button class="btn bad" data-act="outcome" data-id="${a.id}" data-v="noshow">✖ 안 나옴</button>
+        <button class="btn ok" data-act="outcome" data-id="${a.id}" data-v="done">${icon("check")}출근함</button>
+        <button class="btn warn" data-act="cancel-ask" data-id="${a.id}">${icon("alert")}취소</button>
+        <button class="btn bad" data-act="outcome" data-id="${a.id}" data-v="noshow">${icon("x")}안 나옴</button>
       </div></div>`;
 
   const renderHome = () => {
@@ -386,27 +444,35 @@
     const feeSum = doneThisMonth.reduce((sum, a) => sum + (Number(a.fee) || 0), 0);
     const backupDays = state.lastBackup ? daysBetween(state.lastBackup, today()) : null;
 
-    let html = `<div class="big-actions">
-        <button class="btn primary big" data-act="new-job">＋ 일감 받기</button>
-        <button class="btn big" data-act="new-worker">＋ 사람 등록</button>
+    // 맨 위 큰 요약 (오늘 날짜 + 사람이 필요한 일 건수)
+    const now = new Date();
+    const todayNeed = needJobs.filter((j) => j.date === today()).length;
+    let html = `<section class="hero">
+        <p class="hero-date">${now.getMonth() + 1}월 ${now.getDate()}일 ${WEEK[now.getDay()]}요일</p>
+        <p class="hero-title">${!hasData ? "반가워요,<br>다원 소개소예요" : needJobs.length ? `사람이 필요한 일<br><span class="num" data-count="${needJobs.length}" data-suffix="건">${needJobs.length}건</span>` : "빈자리 없이<br>다 채웠어요"}</p>
+        ${hasData && (todayNeed || checks.length) ? `<p class="hero-sub">${[todayNeed ? `오늘 ${todayNeed}건` : "", checks.length ? `출근 체크 ${checks.length}명` : ""].filter(Boolean).join(" · ")}</p>` : ""}
+      </section>
+      <div class="big-actions">
+        <button class="btn primary big" data-act="new-job">${icon("plus")}일감 받기</button>
+        <button class="btn big" data-act="new-worker">${icon("plus")}사람 등록</button>
       </div>`;
 
     if (!hasData) {
-      html += `<h2>처음 오셨네요 😊</h2><div class="card"><p>1. <strong>＋ 사람 등록</strong>으로 구직자를 적어 주세요.</p><p>2. 식당에서 전화가 오면 <strong>＋ 일감 받기</strong>를 누르세요.</p><p>3. 일감 화면에서 추천 순서대로 연락하고 <strong>확정</strong>을 누르면 끝이에요.</p>
+      html += `<h2>처음 오셨네요</h2><div class="card"><p>1. <strong>사람 등록</strong>으로 구직자를 적어 주세요.</p><p>2. 식당에서 전화가 오면 <strong>일감 받기</strong>를 누르세요.</p><p>3. 일감 화면에서 추천 순서대로 연락하고 <strong>확정</strong>을 누르면 끝이에요.</p>
         <p class="muted small">먼저 연습해 보고 싶으면 아래 '백업' 메뉴에서 연습용 예시 자료를 넣을 수 있어요.</p></div>`;
       return html;
     }
     if (backupDays === null || backupDays >= 7) {
-      html += `<div class="banner warn" style="margin-top:14px">💾 ${backupDays === null ? "아직 백업을 한 번도 안 했어요." : `마지막 백업이 ${backupDays}일 전이에요.`}<br>휴대폰을 잃어버려도 괜찮도록 백업해 두세요.<button class="btn" data-act="backup">지금 백업하기</button></div>`;
+      html += `<div class="banner warn" style="margin-top:14px">${icon("download")}${backupDays === null ? "아직 백업을 한 번도 안 했어요." : `마지막 백업이 ${backupDays}일 전이에요.`}<br>휴대폰을 잃어버려도 괜찮도록 백업해 두세요.<button class="btn" data-act="backup">지금 백업하기</button></div>`;
     }
     html += `<h2>사람이 필요해요 <span class="count">${needJobs.length}</span></h2>`;
-    html += needJobs.length ? needJobs.map(jobCard).join("") : `<div class="empty">빈자리가 없어요 👍</div>`;
+    html += needJobs.length ? needJobs.map(jobCard).join("") : `<div class="empty">빈자리가 없어요</div>`;
     if (checks.length) {
       html += `<h2>출근했는지 체크해 주세요 <span class="count">${checks.length}</span></h2><div class="card">${checks.map(checkRow).join("")}</div>`;
     }
     html += `<h2>오늘·내일 확정된 일</h2>`;
     html += fullJobs.length ? fullJobs.map(jobCard).join("") : `<div class="empty">아직 없어요</div>`;
-    html += `<h2>이번 달</h2><div class="month"><div><small>출근 완료</small><strong>${doneThisMonth.length}건</strong></div><div><small>수수료 (${esc(state.feeRate)}%)</small><strong>${feeSum.toLocaleString("ko-KR")}원</strong></div></div>`;
+    html += `<h2>이번 달</h2><div class="month"><div><small>출근 완료</small><strong data-count="${doneThisMonth.length}" data-suffix="건">${doneThisMonth.length}건</strong></div><div><small>수수료 (${esc(state.feeRate)}%)</small><strong data-count="${feeSum}" data-suffix="원">${feeSum.toLocaleString("ko-KR")}원</strong></div></div>`;
     return html;
   };
 
@@ -415,19 +481,19 @@
     const upcoming = ui.jobsMode === "upcoming";
     const list = state.jobs.filter((j) => (upcoming ? j.date >= today() : j.date < today())).sort(sortJobs);
     if (!upcoming) list.reverse();
-    return `<button class="btn primary big" data-act="new-job">＋ 일감 받기</button>
+    return `<button class="btn primary big" data-act="new-job">${icon("plus")}일감 받기</button>
       <div class="segment" style="margin-top:14px"><button class="${upcoming ? "active" : ""}" data-act="jobs-mode" data-v="upcoming">오늘부터</button><button class="${upcoming ? "" : "active"}" data-act="jobs-mode" data-v="past">지난 일감</button></div>
       ${list.length ? list.map(jobCard).join("") : `<div class="empty">${upcoming ? "예정된 일감이 없어요" : "지난 일감이 없어요"}</div>`}`;
   };
 
   // ---------- 화면: 일감 하나 ----------
   const statusText = { asked: "연락함", standby: "대기 중", confirmed: "확정", canceled: "취소" };
-  const outcomeText = { done: "✔ 출근함", late: "⚠ 직전 취소", noshow: "✖ 안 나옴", cancel_ok: "미리 알리고 취소" };
+  const outcomeText = { done: icon("check") + "출근함", late: icon("alert") + "직전 취소", noshow: icon("x") + "안 나옴", cancel_ok: "미리 알리고 취소" };
 
-  const contactButtons = (w, j, msg, msgLabel = "💬 문자") => w.phone
-    ? `<a class="btn" href="${telHref(w.phone)}" data-act="contacted" data-worker="${w.id}" data-job="${j.id}">📞 전화</a>
+  const contactButtons = (w, j, msg, msgLabel = icon("message") + "문자") => w.phone
+    ? `<a class="btn" href="${telHref(w.phone)}" data-act="contacted" data-worker="${w.id}" data-job="${j.id}">${icon("phone")}전화</a>
        <a class="btn" href="${smsHref(w.phone, msg)}" data-act="contacted" data-worker="${w.id}" data-job="${j.id}">${msgLabel}</a>`
-    : `<button class="btn" data-act="edit-worker" data-id="${w.id}">전화번호 넣기</button>`;
+    : `<button class="btn" data-act="edit-worker" data-id="${w.id}">${icon("phone")}전화번호 넣기</button>`;
 
   const assignRow = (a, j) => {
     const w = worker(a.workerId);
@@ -438,28 +504,28 @@
     let state_ = "";
     let buttons = "";
     if (a.status === "confirmed" && a.outcome === "done") {
-      state_ = `<span class="pill ok">✔ 출근함</span> <span class="muted small">수수료 ${won(a.fee)}</span>`;
-      buttons = `<button class="btn ${a.rehire ? "on" : ""}" data-act="toggle-rehire" data-id="${a.id}">${a.rehire ? "♥ 식당이 또 찾음" : "♡ 식당이 또 찾나요?"}</button>
+      state_ = `<span class="pill ok">${icon("check")}출근함</span> <span class="muted small">수수료 ${won(a.fee)}</span>`;
+      buttons = `<button class="btn ${a.rehire ? "on" : ""}" data-act="toggle-rehire" data-id="${a.id}">${a.rehire ? icon("heart", "fill") + "식당이 또 찾음" : icon("heart") + "식당이 또 찾나요?"}</button>
         <button class="btn ghost" data-act="undo-assign" data-id="${a.id}">되돌리기</button>`;
     } else if (a.status === "confirmed") {
       state_ = `<span class="pill ok">확정</span>`;
       buttons = started
-        ? `<button class="btn ok" data-act="outcome" data-id="${a.id}" data-v="done">✔ 출근함</button>
-           <button class="btn bad" data-act="outcome" data-id="${a.id}" data-v="noshow">✖ 안 나옴</button>
-           <button class="btn warn" data-act="cancel-ask" data-id="${a.id}">⚠ 취소 연락옴</button>
-           ${w.phone ? `<a class="btn" href="${telHref(w.phone)}">📞 전화</a>` : ""}`
-        : `${contactButtons(w, j, confirmMsg(j, w), "💬 확정 문자")}
-           ${rest(j.restaurantId)?.phone ? `<a class="btn" href="${smsHref(rest(j.restaurantId).phone, restMsg(j, w))}">💬 식당에 알림</a>` : `<button class="btn" data-act="copy-rest-msg" data-id="${a.id}">식당 문자 복사</button>`}
-           <button class="btn warn" data-act="cancel-ask" data-id="${a.id}">⚠ 취소 연락옴</button>`;
+        ? `<button class="btn ok" data-act="outcome" data-id="${a.id}" data-v="done">${icon("check")}출근함</button>
+           <button class="btn bad" data-act="outcome" data-id="${a.id}" data-v="noshow">${icon("x")}안 나옴</button>
+           <button class="btn warn" data-act="cancel-ask" data-id="${a.id}">${icon("alert")}취소 연락옴</button>
+           ${w.phone ? `<a class="btn" href="${telHref(w.phone)}">${icon("phone")}전화</a>` : ""}`
+        : `${contactButtons(w, j, confirmMsg(j, w), icon("message") + "확정 문자")}
+           ${rest(j.restaurantId)?.phone ? `<a class="btn" href="${smsHref(rest(j.restaurantId).phone, restMsg(j, w))}">${icon("message")}식당에 알림</a>` : `<button class="btn" data-act="copy-rest-msg" data-id="${a.id}">식당 문자 복사</button>`}
+           <button class="btn warn" data-act="cancel-ask" data-id="${a.id}">${icon("alert")}취소 연락옴</button>`;
     } else if (a.status === "standby") {
       state_ = `<span class="pill gray">대기 중</span>`;
       buttons = `${contactButtons(w, j, standbyMsg(j, w))}
-        <button class="btn primary" data-act="set-status" data-id="${a.id}" data-v="confirmed">✓ 확정</button>
+        <button class="btn primary" data-act="set-status" data-id="${a.id}" data-v="confirmed">${icon("check")}확정</button>
         <button class="btn ghost" data-act="remove-assign" data-id="${a.id}">빼기</button>`;
     } else if (a.status === "asked") {
       state_ = `<span class="pill gray">연락함 · 답 기다리는 중</span>`;
       buttons = `${contactButtons(w, j, offerMsg(j, w))}
-        <button class="btn primary" data-act="set-status" data-id="${a.id}" data-v="confirmed">✓ 확정</button>
+        <button class="btn primary" data-act="set-status" data-id="${a.id}" data-v="confirmed">${icon("check")}확정</button>
         <button class="btn" data-act="set-status" data-id="${a.id}" data-v="standby">대기로</button>
         <button class="btn ghost" data-act="remove-assign" data-id="${a.id}">빼기 (못 한대요)</button>`;
     } else {
@@ -475,8 +541,8 @@
       <div class="who">${avatar(w)}<div>
       <div class="name-line"><button class="name-link" data-act="open-worker" data-id="${w.id}">${esc(w.name)}</button>${badge(t)}${near ? `<span class="tag">가까움</span>` : ""}${busy ? `<span class="tag warn">같은 시간 다른 일</span>` : ""}</div>
       <div class="status-line muted">${statLine(s)} · ${s.lastWork ? `마지막 근무 ${esc(dateText(s.lastWork))}` : "근무 기록 없음"}${w.area ? ` · ${esc(w.area)}` : ""}</div></div></div>
-      <div class="btn-row">${contactButtons(w, j, offerMsg(j, w), "💬 일 제안")}
-        <button class="btn primary" data-act="add-assign" data-v="confirmed" data-worker="${w.id}" data-job="${j.id}" ${full || busy ? "disabled" : ""}>✓ 확정</button>
+      <div class="btn-row">${contactButtons(w, j, offerMsg(j, w), icon("message") + "일 제안")}
+        <button class="btn primary" data-act="add-assign" data-v="confirmed" data-worker="${w.id}" data-job="${j.id}" ${full || busy ? "disabled" : ""}>${icon("check")}확정</button>
         <button class="btn" data-act="add-assign" data-v="standby" data-worker="${w.id}" data-job="${j.id}">대기로</button>
       </div></div>`;
   };
@@ -501,22 +567,22 @@
         <div class="fact"><small>필요 인원</small><strong>${esc(j.headcount)}명</strong></div>
         <div class="fact"><small>지역</small><strong>${esc(r?.area || "-")}</strong></div>
       </div>
-      ${r?.address ? `<p class="small">📍 ${esc(r.address)}</p>` : ""}
-      ${j.memo ? `<p class="small">📝 ${esc(j.memo)}</p>` : ""}
+      ${r?.address ? `<p class="meta-line">${icon("pin")}${esc(r.address)}</p>` : ""}
+      ${j.memo ? `<p class="meta-line">${icon("note")}${esc(j.memo)}</p>` : ""}
       <div class="btn-row">${r?.phone
-        ? `<a class="btn" href="${telHref(r.phone)}">📞 식당 전화</a><a class="btn" href="${smsHref(r.phone, restJobMsg(j))}">💬 식당 문자</a>`
-        : r ? `<button class="btn" data-act="edit-rest" data-id="${r.id}">식당 번호 넣기</button>` : ""}<button class="btn" data-act="edit-job" data-id="${j.id}">고치기</button></div>
+        ? `<a class="btn" href="${telHref(r.phone)}">${icon("phone")}식당 전화</a><a class="btn" href="${smsHref(r.phone, restJobMsg(j))}">${icon("message")}식당 문자</a>`
+        : r ? `<button class="btn" data-act="edit-rest" data-id="${r.id}">${icon("phone")}식당 번호 넣기</button>` : ""}<button class="btn" data-act="edit-job" data-id="${j.id}">${icon("edit")}고치기</button></div>
     </div>`;
 
     if (need && standby.length) html += `<div class="banner need">대기 중인 분이 ${standby.length}명 있어요. 아래에서 바로 <strong>확정</strong>하세요.</div>`;
     else if (need) html += `<div class="banner need">${need}명 더 필요해요</div>`;
-    else html += `<div class="banner ok">✅ 인원이 다 찼어요</div>`;
+    else html += `<div class="banner ok">${icon("check")}인원이 다 찼어요</div>`;
 
     if (list.length) html += `<h2>연락한 사람</h2><div class="card">${list.map((a) => assignRow(a, j)).join("")}</div>`;
 
     html += `<h2>추천 순서 <span class="muted small" style="font-weight:400">약속 잘 지키고 오래 쉰 분 먼저</span></h2>`;
     if (!cands.length) {
-      html += `<div class="empty">${esc(j.role)} 가능한 분이 더 없어요.<br><button class="btn" style="margin-top:10px" data-act="new-worker">＋ 사람 등록</button></div>`;
+      html += `<div class="empty">${esc(j.role)} 가능한 분이 더 없어요.<br><button class="btn" style="margin-top:10px" data-act="new-worker">${icon("plus")}사람 등록</button></div>`;
     } else {
       html += `<div class="card">${cands.slice(0, limit).map((c) => candidateRow(c, j, need === 0)).join("")}</div>`;
       if (cands.length > limit) html += `<button class="btn big" data-act="show-more" data-id="${j.id}">${cands.length - limit}명 더 보기</button>`;
@@ -550,8 +616,8 @@
   const renderPeople = () => {
     const isW = ui.peopleMode === "workers";
     return `<div class="segment"><button class="${isW ? "active" : ""}" data-act="people-mode" data-v="workers">구직자 ${state.workers.length}</button><button class="${isW ? "" : "active"}" data-act="people-mode" data-v="restaurants">식당 ${state.restaurants.length}</button></div>
-      <button class="btn primary big" data-act="${isW ? "new-worker" : "new-rest"}">＋ ${isW ? "사람 등록" : "식당 등록"}</button>
-      ${isW ? `<button class="btn big" style="margin-top:10px" data-act="import-vcf">📇 연락처 한 번에 불러오기</button>
+      <button class="btn primary big" data-act="${isW ? "new-worker" : "new-rest"}">${icon("plus")}${isW ? "사람 등록" : "식당 등록"}</button>
+      ${isW ? `<button class="btn big" style="margin-top:10px" data-act="import-vcf">${icon("contacts")}연락처 한 번에 불러오기</button>
         <p class="hint" style="margin-top:6px">연락처 앱에서 <strong>내보내기</strong>로 만든 .vcf 파일을 골라요. 자세한 방법은 백업 화면에 있어요.</p>` : ""}
       <input id="people-q" class="search" style="margin-top:14px" type="search" placeholder="${isW ? "이름·지역·전화번호로 찾기" : "식당 이름·지역으로 찾기"}" value="${esc(ui.peopleQuery)}" />
       ${isW ? `<div class="chips filter-chips">${["", ...ROLES].map((r) => `<button class="${ui.peopleRole === r ? "active" : ""}" data-act="role-filter" data-v="${r}">${r || "전체"}</button>`).join("")}</div>` : ""}
@@ -570,18 +636,18 @@
     const past = rows.filter((x) => !upcoming.includes(x)).slice(0, 20);
     const ranks = (w.roles || []).map((role) => ({ role, ...rankIn(role, w.id) })).filter((r) => r.pos > 0);
     const line = ({ a, j }) => `<li><button class="name-link" data-act="open-job" data-id="${j.id}">${esc(dateText(j.date))} ${esc(restName(j))}</button> <span class="muted small">${esc(j.role)}</span><br>
-      <span class="small">${a.outcome ? outcomeText[a.outcome] : statusText[a.status]}${a.rehire ? " · ♥ 식당이 또 찾음" : ""}</span></li>`;
+      <span class="small">${a.outcome ? outcomeText[a.outcome] : statusText[a.status]}${a.rehire ? ` · ${icon("heart", "fill")}식당이 또 찾음` : ""}</span></li>`;
 
     return `<div class="card">
       <div class="who"><button class="avatar-btn" data-act="edit-worker" data-id="${w.id}" aria-label="사진 바꾸기">${avatar(w, "big")}<small>사진 바꾸기</small></button><div>
       <div class="name-line" style="font-size:1.35rem"><strong>${esc(w.name)}</strong>${badge(t)}${w.active === false ? `<span class="tag">숨김</span>` : ""}</div>
       <div class="status-line">${(w.roles || []).length ? esc(w.roles.join(" · ")) : `<span class="tag warn">업무 미정 · 고치기에서 골라 주세요</span>`}${w.area ? ` · ${esc(w.area)}` : ""}</div>
       <div class="status-line muted">${esc(w.phone || "전화번호 없음")}${w.joined ? ` · 가입 ${esc(w.joined)}` : ""}</div></div></div>
-      ${w.memo ? `<p class="small" style="margin-top:8px">📝 ${esc(w.memo)}</p>` : ""}
-      <div class="btn-row">${w.phone ? `<a class="btn primary" href="${telHref(w.phone)}">📞 전화</a><a class="btn" href="${smsHref(w.phone, "")}">💬 문자</a>` : ""}<button class="btn" data-act="edit-worker" data-id="${w.id}">고치기</button></div>
+      ${w.memo ? `<p class="meta-line" style="margin-top:8px">${icon("note")}${esc(w.memo)}</p>` : ""}
+      <div class="btn-row">${w.phone ? `<a class="btn primary" href="${telHref(w.phone)}">${icon("phone")}전화</a><a class="btn" href="${smsHref(w.phone, "")}">${icon("message")}문자</a>` : ""}<button class="btn" data-act="edit-worker" data-id="${w.id}">${icon("edit")}고치기</button></div>
     </div>
     <h2>약속 기록</h2>
-    <div class="stat-grid"><div><strong>${s.done}</strong><small>✔ 출근</small></div><div><strong>${s.late}</strong><small>⚠ 직전취소</small></div><div><strong>${s.noshow}</strong><small>✖ 안 나옴</small></div><div><strong>${s.rehire}</strong><small>♥ 또 찾음</small></div></div>
+    <div class="stat-grid"><div><strong>${s.done}</strong><small>${icon("check")}출근</small></div><div><strong>${s.late}</strong><small>${icon("alert")}직전취소</small></div><div><strong>${s.noshow}</strong><small>${icon("x")}안 나옴</small></div><div><strong>${s.rehire}</strong><small>${icon("heart", "fill")}또 찾음</small></div></div>
     ${ranks.length ? `<div class="card"><p style="margin:0"><strong>지금 대기 순서</strong></p>${ranks.map((r) => `<p class="small" style="margin:4px 0 0">${esc(r.role)}: ${r.total}명 중 <strong>${r.pos}번째</strong></p>`).join("")}<p class="hint">약속 잘 지키고 오래 쉰 분이 앞 순서예요. 재촉 전화가 오면 참고하세요.</p></div>` : ""}
     <h2>예정된 일</h2>${upcoming.length ? `<div class="card"><ul class="history">${upcoming.map(line).join("")}</ul></div>` : `<div class="empty">없어요</div>`}
     <h2>지난 기록</h2>${past.length ? `<div class="card"><ul class="history">${past.map(line).join("")}</ul></div>` : `<div class="empty">없어요</div>`}
@@ -594,43 +660,54 @@
     ${state.scripts.map((s) => `<div class="card">
       <strong>${esc(s.title)}</strong>${s.kind === "talk" ? `<span class="tag">전화로 말할 때</span>` : ""}
       <p class="script-text">${esc(s.text)}</p>
-      <div class="btn-row">${s.kind === "talk" ? "" : `<a class="btn primary" href="${smsHref("", s.text)}">💬 문자로 보내기</a>`}
-        <button class="btn" data-act="copy-script" data-id="${s.id}">복사</button>
-        <button class="btn ghost" data-act="edit-script" data-id="${s.id}">고치기</button></div>
+      <div class="btn-row">${s.kind === "talk" ? "" : `<a class="btn primary" href="${smsHref("", s.text)}">${icon("send")}문자로 보내기</a>`}
+        <button class="btn" data-act="copy-script" data-id="${s.id}">${icon("copy")}복사</button>
+        <button class="btn ghost" data-act="edit-script" data-id="${s.id}">${icon("edit")}고치기</button></div>
     </div>`).join("")}
-    <button class="btn big" data-act="new-script">＋ 새 문구 만들기</button>`;
+    <button class="btn big" data-act="new-script">${icon("plus")}새 문구 만들기</button>`;
 
   // ---------- 화면: 백업·설정 ----------
-  const renderMore = () => `<h2>연락처에서 구직자 가져오기</h2>
-    <div class="card">
-      <p>휴대폰 연락처를 파일로 내보낸 뒤 여기서 불러오면, 구직자를 <strong>한 번에</strong> 옮길 수 있어요. 이름이 "김○○ 찬모"처럼 저장돼 있으면 업무도 자동으로 골라져요.</p>
-      <ol class="small" style="padding-left:1.2em;margin:8px 0">
+  // 메뉴 한 줄: 왼쪽 아이콘 · 제목과 설명 · 오른쪽 화살표
+  const menuRow = (act, ic, title, sub, tone = "") => `<button class="menu-row" data-act="${act}">
+      <span class="menu-ic ${tone}">${icon(ic)}</span><span class="menu-text"><strong>${title}</strong>${sub ? `<small>${sub}</small>` : ""}</span></button>`;
+  const renderMore = () => {
+    const hasData = state.workers.length || state.jobs.length;
+    const backupSub = state.lastBackup ? `마지막 백업 ${esc(dateText(state.lastBackup))}` : "아직 한 번도 안 했어요";
+    return `<h2>구직자 가져오기</h2>
+    <div class="menu">${menuRow("import-vcf", "contacts", "연락처 파일 불러오기", "연락처를 한 번에 옮겨요")}</div>
+    <details class="howto"><summary>연락처 파일 만드는 방법</summary>
+      <ol>
         <li>연락처 앱 → 메뉴(≡) → 연락처 관리 → 연락처 가져오기/내보내기 → <strong>내보내기</strong></li>
         <li>저장 위치를 <strong>휴대폰(내장 저장공간)</strong>으로 고르기</li>
-        <li>아래 버튼을 눌러 방금 만든 <strong>.vcf 파일</strong> 고르기</li>
+        <li>위 <strong>연락처 파일 불러오기</strong>를 눌러 방금 만든 .vcf 파일 고르기</li>
       </ol>
-      <button class="btn primary big" data-act="import-vcf">📇 연락처 파일 불러오기</button>
-      <p class="hint">연락처 내용은 이 휴대폰 안에서만 읽어요. 다 가져온 뒤에는 내보낸 .vcf 파일을 '내 파일'에서 지워 주세요.</p>
-    </div>
+      <p>이름이 "김○○ 찬모"처럼 저장돼 있으면 업무도 자동으로 골라져요. 연락처는 이 휴대폰 안에서만 읽고, 다 가져온 뒤엔 .vcf 파일을 '내 파일'에서 지워 주세요.</p>
+    </details>
     <h2>백업</h2>
-    <div class="card">
-      <p>자료는 <strong>이 휴대폰 안에만</strong> 저장돼요. 휴대폰을 바꾸거나 잃어버릴 때를 대비해 일주일에 한 번은 백업 파일을 만들어 두세요.</p>
-      <p class="muted small">마지막 백업: ${state.lastBackup ? esc(dateText(state.lastBackup)) : "없음"}</p>
-      <button class="btn primary big" data-act="backup">💾 백업 파일 만들기</button>
-      <p class="hint">'내 파일 → 다운로드' 폴더에 저장돼요. 카카오톡 '나와의 채팅'에 보내 두면 더 안전해요.</p>
-      <button class="btn big" style="margin-top:12px" data-act="import">📂 백업 파일 불러오기</button>
+    <div class="menu">
+      ${menuRow("backup", "download", "백업 파일 만들기", backupSub, state.lastBackup && daysBetween(state.lastBackup, today()) < 7 ? "" : "warn")}
+      ${menuRow("import", "folder", "백업 파일 불러오기", "휴대폰을 바꿨을 때 자료를 되살려요")}
     </div>
-    <h2>수수료</h2>
-    <div class="card"><label class="field">일당의 몇 %인가요?<input id="fee-rate" type="number" inputmode="numeric" min="0" max="100" value="${esc(state.feeRate)}" /></label>
-      <button class="btn" data-act="save-fee">저장</button></div>
-    <h2>홈 화면에 앱 아이콘 만들기</h2>
-    <div class="card small"><p><strong>삼성 인터넷:</strong> 아래 ≡ 메뉴 → '현재 페이지 추가' → '홈 화면'</p><p style="margin:0"><strong>크롬:</strong> 오른쪽 위 ⋮ 메뉴 → '홈 화면에 추가'</p></div>
+    <p class="hint" style="margin:0 4px 0">자료는 이 휴대폰 안에만 있어요. 백업 파일은 '내 파일 → 다운로드'에 저장되고, 카카오톡 '나와의 채팅'에 보내 두면 더 안전해요.</p>
+    <h2>설정</h2>
+    <div class="card fee-card">
+      <span class="menu-ic">${icon("percent")}</span>
+      <label class="fee-label" for="fee-rate"><strong>수수료</strong><small>일당의 몇 %인지</small></label>
+      <div class="fee-input"><input id="fee-rate" type="number" inputmode="numeric" min="0" max="100" value="${esc(state.feeRate)}" /><span>%</span></div>
+      <button class="btn primary" data-act="save-fee">저장</button>
+    </div>
+    <details class="howto"><summary>홈 화면에 앱 아이콘 만들기</summary>
+      <p><strong>크롬:</strong> 오른쪽 위 ⋮ 메뉴 → '홈 화면에 추가'</p>
+      <p><strong>삼성 인터넷:</strong> 아래 ≡ 메뉴 → '현재 페이지 추가' → '홈 화면'</p>
+      <p><strong>아이폰 사파리:</strong> 아래 공유 버튼 → '홈 화면에 추가'</p>
+    </details>
     <h2>연습</h2>
-    <div class="card">
-      ${state.workers.length || state.jobs.length ? `<p class="small">연습이 끝나면 아래 '모든 자료 지우기'로 지우고 실제로 쓰시면 돼요.</p>` : `<button class="btn big" data-act="seed">연습용 예시 자료 넣기</button>`}
-    </div>
+    ${hasData
+      ? `<p class="hint" style="margin:0 4px">연습이 끝나면 아래 '모든 자료 지우기'로 지우고 실제로 쓰시면 돼요.</p>`
+      : `<div class="menu">${menuRow("seed", "play", "연습용 예시 자료 넣기", "가짜 구직자·일감으로 눌러 볼 수 있어요")}</div>`}
     <div class="danger-zone"><button class="link-btn" data-act="wipe">모든 자료 지우기</button></div>
     <p class="app-version">앱 버전 ${APP_VERSION}</p>`;
+  };
 
   // ---------- 그리기 ----------
   const TITLES = { home: "다원 소개소", jobs: "일감", people: "사람", scripts: "문자 문구", more: "백업·설정" };
@@ -638,11 +715,37 @@
   const render = () => {
     const tab = { job: "jobs", worker: "people" }[route.name] || route.name;
     document.querySelectorAll(".tabbar button").forEach((b) => b.classList.toggle("active", b.dataset.tab === tab));
-    const isDetail = route.name === "job" || route.name === "worker";
-    $("#back").hidden = !isDetail;
+    const detail = isDetail(route);
+    $("#back").hidden = !detail;
     $("#title").textContent = route.name === "job" ? "일감 보기" : route.name === "worker" ? (worker(route.id)?.name || "사람") : TITLES[route.name];
-    $("#screen").innerHTML = (screens[route.name] || renderHome)(route.id);
+    const scr = $("#screen");
+    scr.innerHTML = (screens[route.name] || renderHome)(route.id);
+    // 화면을 옮겼을 때만 움직임 (버튼 누를 때마다 다시 그려도 흔들리지 않게)
+    const dir = navDir;
+    navDir = "";
+    // 버튼을 눌러 다시 그릴 때는 목록이 다시 올라오지 않게 차례 효과를 뗌
+    if (!dir) { scr.classList.remove("enter-tab"); return; }
+    if (reduceMotion) return;
+    scr.classList.remove("enter-forward", "enter-back", "enter-tab");
+    void scr.offsetWidth; // 애니메이션을 처음부터 다시 시작하게 함
+    scr.classList.add(`enter-${dir}`);
+    if (dir === "tab") [...scr.children].slice(0, 10).forEach((el, i) => el.style.setProperty("--i", i));
+    countUp(scr);
   };
+  // 숫자가 0부터 빠르게 올라가는 효과 (예: 수수료 12,000원)
+  const countUp = (root) => root.querySelectorAll("[data-count]").forEach((el) => {
+    const to = Number(el.dataset.count) || 0;
+    const suffix = el.dataset.suffix || "";
+    if (!to) return;
+    const start = performance.now();
+    const step = (t) => {
+      const p = Math.min(1, (t - start) / 650);
+      const eased = 1 - Math.pow(1 - p, 3);
+      el.textContent = `${Math.round(to * eased).toLocaleString("ko-KR")}${suffix}`;
+      if (p < 1) requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
+  });
   const refresh = () => { save(); render(); };
 
   // ---------- 입력창들 ----------
@@ -660,7 +763,7 @@
         <select name="restaurantId" required>
           <option value="">식당을 고르세요</option>
           ${rests.map((r) => `<option value="${r.id}" ${r.id === j.restaurantId ? "selected" : ""}>${esc(r.name)}${r.area ? ` (${esc(r.area)})` : ""}</option>`).join("")}
-          <option value="__new" ${rests.length ? "" : "selected"}>＋ 새 식당 등록</option>
+          <option value="__new" ${rests.length ? "" : "selected"}>+ 새 식당 등록</option>
         </select></label>
       <div class="new-rest" ${rests.length ? "hidden" : ""}>
         <label class="field">식당 이름<input name="rName" autocomplete="off" /></label>
@@ -674,7 +777,7 @@
       </fieldset>
       <div class="two"><label class="field">시작<input type="time" name="start" value="${esc(j.start)}" required /></label><label class="field">끝<input type="time" name="end" value="${esc(j.end)}" required /></label></div>
       <label class="field">일당 (원)<input name="pay" inputmode="numeric" placeholder="예: 130000" value="${esc(j.pay || "")}" /><span class="hint" id="pay-hint"></span></label>
-      <div class="field">필요 인원<div class="stepper"><button type="button" data-step="-1" aria-label="줄이기">−</button><input name="headcount" type="number" min="1" max="20" value="${esc(j.headcount)}" /><button type="button" data-step="1" aria-label="늘리기">＋</button></div></div>
+      <div class="field">필요 인원<div class="stepper"><button type="button" data-step="-1" aria-label="줄이기">${icon("minus")}</button><input name="headcount" type="number" min="1" max="20" value="${esc(j.headcount)}" /><button type="button" data-step="1" aria-label="늘리기">${icon("plus")}</button></div></div>
       <label class="field">메모<textarea name="memo" rows="2" placeholder="예: 앞치마 지참">${esc(j.memo)}</textarea></label>`;
 
     openSheet({
@@ -752,14 +855,14 @@
     openSheet({
       title: existing ? "사람 정보 고치기" : "사람 등록",
       body: `${canPickContacts
-          ? `<button type="button" class="btn big" data-pick-contact style="margin-bottom:16px">📇 연락처에서 고르기</button>`
-          : `<label class="btn big" style="margin-bottom:6px">📇 연락처 파일로 불러오기<input type="file" accept=".vcf,text/vcard,text/x-vcard,text/directory" data-vcf-one hidden /></label>
+          ? `<button type="button" class="btn big" data-pick-contact style="margin-bottom:16px">${icon("contacts")}연락처에서 고르기</button>`
+          : `<label class="btn big" style="margin-bottom:6px">${icon("contacts")}연락처 파일로 불러오기<input type="file" accept=".vcf,text/vcard,text/x-vcard,text/directory" data-vcf-one hidden /></label>
              <p class="hint" style="margin:0 0 16px">연락처 앱에서 한 사람을 골라 <strong>공유 → 파일로 저장</strong>한 뒤, 이 버튼으로 그 파일을 고르세요.</p>`}
         <div class="photo-edit">
-          <span id="photo-preview">${existing ? avatar(existing, "big") : `<span class="avatar big" aria-hidden="true">📷</span>`}</span>
+          <span id="photo-preview">${existing ? avatar(existing, "big") : `<span class="avatar big" aria-hidden="true">${icon("camera")}</span>`}</span>
           <div class="photo-buttons">
-            <label class="btn">📷 사진 찍기<input type="file" accept="image/*" capture="environment" data-photo-input hidden /></label>
-            <label class="btn">🖼️ 사진 불러오기<input type="file" accept="image/*" data-photo-input hidden /></label>
+            <label class="btn">${icon("camera")}사진 찍기<input type="file" accept="image/*" capture="environment" data-photo-input hidden /></label>
+            <label class="btn">${icon("image")}사진 불러오기<input type="file" accept="image/*" data-photo-input hidden /></label>
             <button type="button" class="btn ghost" data-photo-clear ${hasPhoto ? "" : "hidden"}>사진 지우기</button>
           </div>
         </div>
@@ -774,7 +877,7 @@
         const clearBtn = form.querySelector("[data-photo-clear]");
         // 미리보기 사진 바꾸기 (저장 전까지는 실제로 바뀌지 않음)
         const showPhoto = (url) => {
-          preview.innerHTML = url ? `<img class="avatar big" src="${url}" alt="" />` : `<span class="avatar big" aria-hidden="true">📷</span>`;
+          preview.innerHTML = url ? `<img class="avatar big" src="${url}" alt="" />` : `<span class="avatar big" aria-hidden="true">${icon("camera")}</span>`;
           clearBtn.hidden = !url;
         };
         form.querySelectorAll("[data-photo-input]").forEach((input) => input.addEventListener("change", async () => {
@@ -805,7 +908,7 @@
           }
           // 이미 등록된 번호면 알려줌 (두 번 등록 방지)
           const dup = phone && state.workers.find((x) => x.id !== existing?.id && samePhone(x.phone, phone));
-          toast(dup ? `⚠ 이미 등록된 번호예요: ${dup.name}님` : gotPhoto ? "연락처 정보와 사진을 넣었어요" : "연락처 정보를 넣었어요");
+          toast(dup ? `이미 등록된 번호예요: ${dup.name}님` : gotPhoto ? "연락처 정보와 사진을 넣었어요" : "연락처 정보를 넣었어요");
         };
 
         // 방법 1: 크롬 연락처 선택 창 (안드로이드)
@@ -859,7 +962,7 @@
     const r = existing || { name: "", area: "", phone: "", address: "", memo: "" };
     openSheet({
       title: existing ? "식당 정보" : "식당 등록",
-      body: `${existing?.phone ? `<div class="btn-row" style="margin:0 0 16px"><a class="btn" href="${telHref(existing.phone)}">📞 전화하기</a><a class="btn" href="${smsHref(existing.phone, "")}">💬 문자하기</a></div>` : ""}
+      body: `${existing?.phone ? `<div class="btn-row" style="margin:0 0 16px"><a class="btn" href="${telHref(existing.phone)}">${icon("phone")}전화하기</a><a class="btn" href="${smsHref(existing.phone, "")}">${icon("message")}문자하기</a></div>` : ""}
         <label class="field">식당 이름<input name="name" required value="${esc(r.name)}" /></label>
         <div class="two"><label class="field">지역<input name="area" placeholder="예: 종로" value="${esc(r.area)}" /></label><label class="field">전화<input name="phone" type="tel" inputmode="tel" value="${esc(r.phone)}" /></label></div>
         <label class="field">주소<input name="address" value="${esc(r.address)}" /></label>
@@ -903,7 +1006,7 @@
       title: `${w?.name || ""}님 취소`,
       body: `<p>언제 알려왔나요?</p><div class="choice-list">
         <label class="choice"><input type="radio" name="kind" value="cancel_ok" required /><span><strong>미리 알려줬어요</strong><small>하루 전 이상 · 기록에 불이익 없음</small></span></label>
-        <label class="choice"><input type="radio" name="kind" value="late" /><span><strong>직전에 취소했어요</strong><small>약속 기록에 ⚠ 표시가 남아요</small></span></label></div>`,
+        <label class="choice"><input type="radio" name="kind" value="late" /><span><strong>직전에 취소했어요</strong><small>약속 기록에 '직전 취소'로 남아요</small></span></label></div>`,
       submit: "취소로 기록",
       onSubmit: (fd) => {
         setOutcome(a, val(fd, "kind"));
@@ -1111,15 +1214,15 @@
       sheet.close();
       refresh();
     },
-    "add-assign": (el) => { addAssign(el.dataset.worker, el.dataset.job, el.dataset.v); render(); toast(el.dataset.v === "confirmed" ? "확정했어요. 확정 문자를 보내 주세요." : "대기로 넣었어요"); },
+    "add-assign": (el) => { if (el.dataset.v === "confirmed") buzz(); addAssign(el.dataset.worker, el.dataset.job, el.dataset.v); render(); toast(el.dataset.v === "confirmed" ? "확정했어요. 확정 문자를 보내 주세요." : "대기로 넣었어요"); },
     "contacted": (el) => {
       // 전화/문자 앱이 열린 뒤에 기록 (링크 동작을 막지 않음)
       const { worker: wId, job: jId } = el.dataset;
       if (!state.assigns.some((a) => a.workerId === wId && a.jobId === jId)) setTimeout(() => { addAssign(wId, jId, "asked"); render(); }, 400);
     },
-    "set-status": (el) => { const a = assign(el.dataset.id); addAssign(a.workerId, a.jobId, el.dataset.v); render(); if (el.dataset.v === "confirmed" && assign(el.dataset.id).status === "confirmed") toast("확정했어요. 확정 문자를 보내 주세요."); },
+    "set-status": (el) => { if (el.dataset.v === "confirmed") buzz(); const a = assign(el.dataset.id); addAssign(a.workerId, a.jobId, el.dataset.v); render(); if (el.dataset.v === "confirmed" && assign(el.dataset.id).status === "confirmed") toast("확정했어요. 확정 문자를 보내 주세요."); },
     "remove-assign": (el) => { state.assigns = state.assigns.filter((a) => a.id !== el.dataset.id); refresh(); },
-    "outcome": (el) => { setOutcome(assign(el.dataset.id), el.dataset.v); render(); toast(el.dataset.v === "done" ? "출근으로 기록했어요 ✔" : "안 나옴으로 기록했어요"); },
+    "outcome": (el) => { buzz(); setOutcome(assign(el.dataset.id), el.dataset.v); render(); toast(el.dataset.v === "done" ? "출근으로 기록했어요" : "안 나옴으로 기록했어요"); },
     "cancel-ask": (el) => cancelAsk(assign(el.dataset.id)),
     "undo-assign": (el) => { const a = assign(el.dataset.id); a.status = "confirmed"; a.outcome = ""; a.fee = 0; a.rehire = false; refresh(); toast("확정 상태로 되돌렸어요"); },
     "toggle-rehire": (el) => { const a = assign(el.dataset.id); a.rehire = !a.rehire; refresh(); },
@@ -1168,10 +1271,16 @@
     navigator.serviceWorker.register("sw.js", { updateViaCache: "none" }).catch(() => {});
   }
 
-  // 사진을 먼저 불러온 뒤 화면을 그림 (사진을 못 불러와도 화면은 그림)
-  photoDb.all()
+  // 사진을 먼저 불러온 뒤 첫 화면을 그림 (0.8초 안에 안 되면 먼저 그리고, 사진이 오면 다시 그림)
+  let photosLoaded = false;
+  const photosReady = photoDb.all()
     .then((list) => list.forEach(([id, url]) => photos.set(id, url)))
     .catch(() => {})
-    .finally(render);
-  render();
+    .finally(() => { photosLoaded = true; });
+  Promise.race([photosReady, new Promise((r) => setTimeout(r, 800))]).then(() => {
+    const late = !photosLoaded;
+    render();
+    // 사진이 늦게 왔을 때만 한 번 더 그림 (제때 왔으면 다시 그리지 않아 첫 움직임이 끊기지 않음)
+    if (late) photosReady.then(() => { if (photos.size) render(); });
+  });
 })();
