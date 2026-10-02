@@ -58,6 +58,138 @@
   // 휴대폰이 저장 공간을 정리할 때 이 자료를 지우지 않도록 요청
   try { navigator.storage?.persist?.(); } catch (_) {}
 
+  // ---------- 사진 저장소 ----------
+  // 사진은 용량이 커서 더 큰 저장 공간(IndexedDB)에 따로 보관. photos: 구직자 번호 → 사진
+  const photos = new Map();
+  const photoDb = (() => {
+    let opening;
+    const open = () => (opening ||= new Promise((resolve, reject) => {
+      const req = indexedDB.open("dawon-photos", 1);
+      req.onupgradeneeded = () => req.result.createObjectStore("photos");
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    }));
+    const run = async (mode, work) => {
+      const db = await open();
+      return new Promise((resolve, reject) => {
+        const tx = db.transaction("photos", mode);
+        const req = work(tx.objectStore("photos"));
+        tx.oncomplete = () => resolve(req?.result);
+        tx.onerror = () => reject(tx.error);
+      });
+    };
+    return {
+      all: async () => { const keys = await run("readonly", (s) => s.getAllKeys()); const vals = await run("readonly", (s) => s.getAll()); return keys.map((k, i) => [k, vals[i]]); },
+      put: (id, url) => run("readwrite", (s) => s.put(url, id)),
+      del: (id) => run("readwrite", (s) => s.delete(id)),
+      clear: () => run("readwrite", (s) => s.clear()),
+    };
+  })();
+  const setPhoto = async (id, url) => {
+    if (!url) return;
+    photos.set(id, url);
+    try { await photoDb.put(id, url); } catch (_) { toast("사진을 저장하지 못했어요. 휴대폰 저장 공간을 확인해 주세요."); }
+  };
+  const removePhoto = (id) => { photos.delete(id); photoDb.del(id).catch(() => {}); };
+  // shrinkImage: 사진을 작은 정사각형(가로세로 240)으로 줄여서 용량을 아낌
+  const shrinkImage = (src, size = 240) => new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      const side = Math.min(img.width, img.height);
+      if (!side) { resolve(""); return; }
+      const canvas = document.createElement("canvas");
+      canvas.width = canvas.height = size;
+      canvas.getContext("2d").drawImage(img, (img.width - side) / 2, (img.height - side) / 2, side, side, 0, 0, size, size);
+      resolve(canvas.toDataURL("image/jpeg", 0.8));
+    };
+    img.onerror = () => resolve("");
+    img.src = src;
+  });
+
+  // ---------- 연락처 읽기 ----------
+  // 연락처 이름 "김○○ 찬모"에서 업무 말을 찾아냄 (홀·설겆이 같은 다른 표현도 인정)
+  const ROLE_WORDS = { 찬모: "찬모", 서빙: "서빙", 홀서빙: "서빙", 홀: "서빙", 설거지: "설거지", 설겆이: "설거지" };
+  const parseContactName = (full) => {
+    const roles = [];
+    const rest = [];
+    const addRole = (r) => { if (!roles.includes(r)) roles.push(r); };
+    String(full || "").split(/[\s/,·()[\]]+/).filter(Boolean).forEach((token) => {
+      if (ROLE_WORDS[token]) { addRole(ROLE_WORDS[token]); return; }
+      // "김영희찬모"처럼 붙여 쓴 경우
+      const word = Object.keys(ROLE_WORDS).sort((a, b) => b.length - a.length).find((k) => token.length > k.length && token.endsWith(k));
+      if (word) { rest.push(token.slice(0, -word.length)); addRole(ROLE_WORDS[word]); return; }
+      rest.push(token);
+    });
+    // 업무 말이 없으면 이름을 나누지 않고 그대로 씀 (예: "우리 딸")
+    if (!roles.length) return { name: String(full || "").trim(), roles, extra: "" };
+    return { name: rest[0] || String(full || "").trim(), roles, extra: rest.slice(1).join(" ") };
+  };
+  // 전화번호를 010-1234-5678 모양으로
+  const normPhone = (p) => {
+    let d = String(p || "").replace(/[^0-9]/g, "");
+    if (d.startsWith("82")) d = "0" + d.slice(2);
+    if (d.length === 11) return `${d.slice(0, 3)}-${d.slice(3, 7)}-${d.slice(7)}`;
+    if (d.length === 10) return d.startsWith("02") ? `${d.slice(0, 2)}-${d.slice(2, 6)}-${d.slice(6)}` : `${d.slice(0, 3)}-${d.slice(3, 6)}-${d.slice(6)}`;
+    return d;
+  };
+  const samePhone = (a, b) => { const x = normPhone(a).replace(/-/g, ""); return x.length >= 9 && x === normPhone(b).replace(/-/g, ""); };
+
+  // QP(Quoted-Printable): 옛 연락처 파일에서 한글을 =EA=B9=80 처럼 적는 방식을 원래 글자로 되돌림
+  const qpDecode = (s, charset) => {
+    const bytes = [];
+    for (let i = 0; i < s.length; i++) {
+      if (s[i] === "=" && /^[0-9A-Fa-f]{2}$/.test(s.substr(i + 1, 2))) { bytes.push(parseInt(s.substr(i + 1, 2), 16)); i += 2; }
+      else bytes.push(s.charCodeAt(i) & 0xff);
+    }
+    try { return new TextDecoder(charset || "utf-8").decode(new Uint8Array(bytes)); }
+    catch (_) { return new TextDecoder().decode(new Uint8Array(bytes)); }
+  };
+  const vUnescape = (v) => v.replace(/\\n/gi, " ").replace(/\\([,;\\])/g, "$1").trim();
+  // parseVcf: 연락처 파일(.vcf) 글자를 사람 목록으로 바꿈
+  const parseVcf = (text) => {
+    const lines = [];
+    for (const line of String(text).replace(/\r\n?/g, "\n").split("\n")) {
+      const last = lines.length - 1;
+      // 줄이 접혀 있으면 앞줄에 이어 붙임
+      if (last >= 0 && /^[ \t]/.test(line)) { lines[last] += line.slice(1); continue; }
+      if (last >= 0 && /QUOTED-PRINTABLE/i.test(lines[last].split(":")[0]) && lines[last].endsWith("=")) { lines[last] = lines[last].slice(0, -1) + line; continue; }
+      lines.push(line);
+    }
+    const cards = [];
+    let cur = null;
+    for (const line of lines) {
+      if (/^BEGIN:VCARD/i.test(line)) { cur = { fn: "", n: "", tels: [], photo: "" }; continue; }
+      if (/^END:VCARD/i.test(line)) { if (cur) cards.push(cur); cur = null; continue; }
+      if (!cur) continue;
+      const at = line.indexOf(":");
+      if (at < 0) continue;
+      const head = line.slice(0, at).split(";");
+      const prop = head[0].split(".").pop().toUpperCase();
+      const params = head.slice(1).join(";").toUpperCase();
+      let value = line.slice(at + 1);
+      if (/QUOTED-PRINTABLE/.test(params)) value = qpDecode(value, (params.match(/CHARSET=([^;:]+)/) || [])[1]);
+      if (prop === "FN") cur.fn = vUnescape(value);
+      else if (prop === "N") { const p = value.split(";").map(vUnescape); cur.n = `${p[0] || ""}${p[1] || ""}`.trim(); }
+      else if (prop === "TEL") cur.tels.push({ num: value.trim(), cell: /CELL/.test(params) });
+      else if (prop === "PHOTO") {
+        const v = value.replace(/\s/g, "");
+        if (v.startsWith("data:")) cur.photo = v;
+        else if (/ENCODING=(B|BASE64)|BASE64/.test(params) && v) cur.photo = `data:image/${/PNG/.test(params) ? "png" : "jpeg"};base64,${v}`;
+      }
+    }
+    return cards.map((c) => {
+      const full = c.fn || c.n;
+      const tel = (c.tels.find((t) => t.cell) || c.tels[0] || {}).num || "";
+      return { full, phone: normPhone(tel), photo: c.photo, ...parseContactName(full) };
+    }).filter((c) => c.full && c.phone);
+  };
+  // 크롬 연락처 선택 기능을 쓸 수 있는지
+  const canPickContacts = "contacts" in navigator && "ContactsManager" in window;
+  const avatar = (w, cls = "") => {
+    const src = w && photos.get(w.id);
+    return src ? `<img class="avatar ${cls}" src="${src}" alt="" />` : `<span class="avatar ${cls}" aria-hidden="true">${esc((w?.name || "?").slice(0, 1))}</span>`;
+  };
+
   // ---------- 자료 찾기 ----------
   const worker = (id) => state.workers.find((w) => w.id === id);
   const rest = (id) => state.restaurants.find((r) => r.id === id);
@@ -227,8 +359,8 @@
     .sort((x, y) => sortJobs(x.j, y.j));
 
   const checkRow = ({ a, j, w }) => `<div class="check-row">
-      <div><button class="name-link" data-act="open-worker" data-id="${w.id}">${esc(w.name)}</button>
-      <span class="muted small">${esc(dateText(j.date))} · ${esc(restName(j))} ${esc(j.role)}</span></div>
+      <div class="who">${avatar(w)}<div><button class="name-link" data-act="open-worker" data-id="${w.id}">${esc(w.name)}</button>
+      <div class="muted small">${esc(dateText(j.date))} · ${esc(restName(j))} ${esc(j.role)}</div></div></div>
       <div class="btn-row three">
         <button class="btn ok" data-act="outcome" data-id="${a.id}" data-v="done">✔ 출근함</button>
         <button class="btn warn" data-act="cancel-ask" data-id="${a.id}">⚠ 취소</button>
@@ -325,14 +457,15 @@
       state_ = `<span class="pill gray">${outcomeText[a.outcome] || "취소"}</span>`;
       buttons = `<button class="btn ghost" data-act="undo-assign" data-id="${a.id}">되돌리기</button>`;
     }
-    return `<div class="person-row ${a.status === "canceled" ? "dim" : ""}">${head}<div class="status-line">${state_}</div><div class="btn-row">${buttons}</div></div>`;
+    return `<div class="person-row ${a.status === "canceled" ? "dim" : ""}"><div class="who">${avatar(w)}<div>${head}<div class="status-line">${state_}</div></div></div><div class="btn-row">${buttons}</div></div>`;
   };
 
   const candidateRow = (c, j, full) => {
     const { w, s, t, near, busy } = c;
     return `<div class="person-row">
+      <div class="who">${avatar(w)}<div>
       <div class="name-line"><button class="name-link" data-act="open-worker" data-id="${w.id}">${esc(w.name)}</button>${badge(t)}${near ? `<span class="tag">가까움</span>` : ""}${busy ? `<span class="tag warn">같은 시간 다른 일</span>` : ""}</div>
-      <div class="status-line muted">${statLine(s)} · ${s.lastWork ? `마지막 근무 ${esc(dateText(s.lastWork))}` : "근무 기록 없음"}${w.area ? ` · ${esc(w.area)}` : ""}</div>
+      <div class="status-line muted">${statLine(s)} · ${s.lastWork ? `마지막 근무 ${esc(dateText(s.lastWork))}` : "근무 기록 없음"}${w.area ? ` · ${esc(w.area)}` : ""}</div></div></div>
       <div class="btn-row">${contactButtons(w, j, offerMsg(j, w), "💬 일 제안")}
         <button class="btn primary" data-act="add-assign" data-v="confirmed" data-worker="${w.id}" data-job="${j.id}" ${full || busy ? "disabled" : ""}>✓ 확정</button>
         <button class="btn" data-act="add-assign" data-v="standby" data-worker="${w.id}" data-job="${j.id}">대기로</button>
@@ -363,7 +496,7 @@
       ${j.memo ? `<p class="small">📝 ${esc(j.memo)}</p>` : ""}
       <div class="btn-row">${r?.phone
         ? `<a class="btn" href="${telHref(r.phone)}">📞 식당 전화</a><a class="btn" href="${smsHref(r.phone, restJobMsg(j))}">💬 식당 문자</a>`
-        : r ? `<button class="btn" data-act="edit-rest" data-id="${r.id}">식당 전화번호 넣기</button>` : ""}<button class="btn" data-act="edit-job" data-id="${j.id}">고치기</button></div>
+        : r ? `<button class="btn" data-act="edit-rest" data-id="${r.id}">식당 번호 넣기</button>` : ""}<button class="btn" data-act="edit-job" data-id="${j.id}">고치기</button></div>
     </div>`;
 
     if (need && standby.length) html += `<div class="banner need">대기 중인 분이 ${standby.length}명 있어요. 아래에서 바로 <strong>확정</strong>하세요.</div>`;
@@ -399,10 +532,10 @@
       (!q || `${w.name} ${w.area} ${w.phone} ${w.memo} ${(w.roles || []).join(" ")}`.toLowerCase().includes(q)) &&
       (!ui.peopleRole || (w.roles || []).includes(ui.peopleRole))))
       .sort((x, y) => (Number(x.w.active === false) - Number(y.w.active === false)) || byPriority(x, y));
-    return list.length ? list.map(({ w, s, t }) => `<button class="worker-card ${w.active === false ? "hidden-worker" : ""}" data-act="open-worker" data-id="${w.id}">
+    return list.length ? list.map(({ w, s, t }) => `<button class="worker-card ${w.active === false ? "hidden-worker" : ""}" data-act="open-worker" data-id="${w.id}"><div class="who">${avatar(w)}<div>
         <div class="name-line"><strong>${esc(w.name)}</strong>${badge(t)}${w.active === false ? `<span class="tag">숨김</span>` : ""}</div>
-        <div class="status-line">${esc((w.roles || []).join(" · "))}${w.area ? ` · ${esc(w.area)}` : ""}</div>
-        <div class="status-line muted">${statLine(s)} · ${s.lastWork ? `마지막 근무 ${esc(dateText(s.lastWork))}` : "근무 기록 없음"}</div></button>`).join("")
+        <div class="status-line">${(w.roles || []).length ? esc(w.roles.join(" · ")) : `<span class="tag warn">업무 미정</span>`}${w.area ? ` · ${esc(w.area)}` : ""}</div>
+        <div class="status-line muted">${statLine(s)} · ${s.lastWork ? `마지막 근무 ${esc(dateText(s.lastWork))}` : "근무 기록 없음"}</div></div></div></button>`).join("")
       : `<div class="empty">${q || ui.peopleRole ? "조건에 맞는 분이 없어요" : "등록된 분이 없어요"}</div>`;
   };
   const renderPeople = () => {
@@ -429,9 +562,10 @@
       <span class="small">${a.outcome ? outcomeText[a.outcome] : statusText[a.status]}${a.rehire ? " · ♥ 식당이 또 찾음" : ""}</span></li>`;
 
     return `<div class="card">
+      <div class="who">${avatar(w, "big")}<div>
       <div class="name-line" style="font-size:1.35rem"><strong>${esc(w.name)}</strong>${badge(t)}${w.active === false ? `<span class="tag">숨김</span>` : ""}</div>
-      <div class="status-line">${esc((w.roles || []).join(" · "))}${w.area ? ` · ${esc(w.area)}` : ""}</div>
-      <div class="status-line muted">${esc(w.phone || "전화번호 없음")}${w.joined ? ` · 가입 ${esc(w.joined)}` : ""}</div>
+      <div class="status-line">${(w.roles || []).length ? esc(w.roles.join(" · ")) : `<span class="tag warn">업무 미정 · 고치기에서 골라 주세요</span>`}${w.area ? ` · ${esc(w.area)}` : ""}</div>
+      <div class="status-line muted">${esc(w.phone || "전화번호 없음")}${w.joined ? ` · 가입 ${esc(w.joined)}` : ""}</div></div></div>
       ${w.memo ? `<p class="small" style="margin-top:8px">📝 ${esc(w.memo)}</p>` : ""}
       <div class="btn-row">${w.phone ? `<a class="btn primary" href="${telHref(w.phone)}">📞 전화</a><a class="btn" href="${smsHref(w.phone, "")}">💬 문자</a>` : ""}<button class="btn" data-act="edit-worker" data-id="${w.id}">고치기</button></div>
     </div>
@@ -456,7 +590,18 @@
     <button class="btn big" data-act="new-script">＋ 새 문구 만들기</button>`;
 
   // ---------- 화면: 백업·설정 ----------
-  const renderMore = () => `<h2>백업</h2>
+  const renderMore = () => `<h2>연락처에서 구직자 가져오기</h2>
+    <div class="card">
+      <p>휴대폰 연락처를 파일로 내보낸 뒤 여기서 불러오면, 구직자를 <strong>한 번에</strong> 옮길 수 있어요. 이름이 "김○○ 찬모"처럼 저장돼 있으면 업무도 자동으로 골라져요.</p>
+      <ol class="small" style="padding-left:1.2em;margin:8px 0">
+        <li>연락처 앱 → 메뉴(≡) → 연락처 관리 → 연락처 가져오기/내보내기 → <strong>내보내기</strong></li>
+        <li>저장 위치를 <strong>휴대폰(내장 저장공간)</strong>으로 고르기</li>
+        <li>아래 버튼을 눌러 방금 만든 <strong>.vcf 파일</strong> 고르기</li>
+      </ol>
+      <button class="btn primary big" data-act="import-vcf">📇 연락처 파일 불러오기</button>
+      <p class="hint">연락처 내용은 이 휴대폰 안에서만 읽어요. 다 가져온 뒤에는 내보낸 .vcf 파일을 '내 파일'에서 지워 주세요.</p>
+    </div>
+    <h2>백업</h2>
     <div class="card">
       <p>자료는 <strong>이 휴대폰 안에만</strong> 저장돼요. 휴대폰을 바꾸거나 잃어버릴 때를 대비해 일주일에 한 번은 백업 파일을 만들어 두세요.</p>
       <p class="muted small">마지막 백업: ${state.lastBackup ? esc(dateText(state.lastBackup)) : "없음"}</p>
@@ -589,20 +734,52 @@
   // 사람 등록 / 고치기
   const workerForm = (existing) => {
     const w = existing || { name: "", phone: "", roles: [], area: "", memo: "", joined: today() };
+    let pickedPhoto = ""; // 연락처에서 가져온 사진 (저장할 때 넣음)
     openSheet({
       title: existing ? "사람 정보 고치기" : "사람 등록",
-      body: `<label class="field">이름<input name="name" required autocomplete="off" value="${esc(w.name)}" /></label>
+      body: `${canPickContacts ? `<button type="button" class="btn big" data-pick-contact style="margin-bottom:16px">📇 연락처에서 고르기</button>` : ""}
+        <div class="who" id="picked-photo" ${existing && photos.get(existing.id) ? "" : "hidden"}>${existing ? avatar(existing, "big") : ""}<span class="muted small">사진</span></div>
+        <label class="field">이름<input name="name" required autocomplete="off" value="${esc(w.name)}" /></label>
         <label class="field">전화번호<input name="phone" type="tel" inputmode="tel" placeholder="010-0000-0000" value="${esc(w.phone)}" /></label>
         <fieldset class="field"><legend>할 수 있는 일 (여러 개 고를 수 있어요)</legend>${roleChips("roles", w.roles || [], true)}</fieldset>
         <label class="field">사는 곳 / 가능 지역<input name="area" placeholder="예: 종로" value="${esc(w.area)}" /></label>
         <label class="field">가입일<input name="joined" type="date" value="${esc(w.joined || "")}" /></label>
         <label class="field">메모<textarea name="memo" rows="3" placeholder="예: 오전만 가능, 한식 경력 10년">${esc(w.memo)}</textarea></label>`,
+      onReady: (form) => {
+        const btn = form.querySelector("[data-pick-contact]");
+        if (!btn) return;
+        btn.addEventListener("click", async () => {
+          try {
+            const supported = await navigator.contacts.getProperties();
+            const props = ["name", "tel", ...(supported.includes("icon") ? ["icon"] : [])];
+            const [c] = await navigator.contacts.select(props, { multiple: false });
+            if (!c) return;
+            const parsed = parseContactName((c.name || [])[0] || "");
+            form.elements.name.value = parsed.name;
+            if (c.tel?.[0]) form.elements.phone.value = normPhone(c.tel[0]);
+            form.querySelectorAll("input[name=roles]").forEach((i) => { if (parsed.roles.includes(i.value)) i.checked = true; });
+            if (parsed.extra && !form.elements.memo.value) form.elements.memo.value = parsed.extra;
+            const icon = c.icon?.[0];
+            if (icon) {
+              const url = URL.createObjectURL(icon);
+              pickedPhoto = await shrinkImage(url);
+              URL.revokeObjectURL(url);
+              if (pickedPhoto) { const box = $("#picked-photo", form); box.hidden = false; box.innerHTML = `<img class="avatar big" src="${pickedPhoto}" alt="" /><span class="muted small">연락처 사진</span>`; }
+            }
+            toast(icon ? "연락처 정보와 사진을 넣었어요" : "연락처 정보를 넣었어요");
+          } catch (_) {
+            toast("연락처를 가져오지 못했어요. 직접 입력해 주세요.");
+          }
+        });
+      },
       onSubmit: (fd) => {
         const roles = fd.getAll("roles").map(String);
         if (!roles.length) { toast("할 수 있는 일을 하나 이상 골라 주세요"); return false; }
         const data = { name: val(fd, "name"), phone: val(fd, "phone"), roles, area: val(fd, "area"), joined: val(fd, "joined"), memo: val(fd, "memo") };
-        if (existing) { Object.assign(existing, data); toast("고쳤어요"); }
-        else { state.workers.push({ id: uid(), active: true, ...data }); toast(`${data.name}님을 등록했어요`); }
+        let id;
+        if (existing) { Object.assign(existing, data); id = existing.id; toast("고쳤어요"); }
+        else { id = uid(); state.workers.push({ id, active: true, ...data }); toast(`${data.name}님을 등록했어요`); }
+        if (pickedPhoto) setPhoto(id, pickedPhoto).then(render);
         refresh();
       },
     });
@@ -693,7 +870,7 @@
   // ---------- 백업 ----------
   const doBackup = () => {
     state.lastBackup = today(); // 파일 안에도 백업 날짜가 들어가도록 먼저 적음
-    const blob = new Blob([JSON.stringify(state, null, 2)], { type: "application/json" });
+    const blob = new Blob([JSON.stringify({ ...state, photos: Object.fromEntries(photos) })], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
@@ -713,11 +890,82 @@
       const data = JSON.parse(await file.text());
       if (!isValidData(data)) throw new Error("bad");
       if (!confirm(`백업 파일을 불러오면 지금 휴대폰의 자료가 백업 내용으로 바뀌어요.\n(구직자 ${data.workers.length}명, 일감 ${data.jobs.length}건)\n계속할까요?`)) return;
-      state = { ...blank(), ...data };
+      const { photos: savedPhotos = {}, ...rest } = data;
+      state = { ...blank(), ...rest };
+      photos.clear();
+      await photoDb.clear().catch(() => {});
+      for (const [id, url] of Object.entries(savedPhotos)) await setPhoto(id, url);
       refresh();
       toast("백업을 불러왔어요");
     } catch (_) {
       toast("다원 백업 파일이 아니에요. 파일을 확인해 주세요.");
+    }
+  });
+
+  // ---------- 연락처 파일(.vcf) 한 번에 가져오기 ----------
+  const importContacts = (list) => {
+    const rows = list.map((c, i) => {
+      const dup = state.workers.find((w) => samePhone(w.phone, c.phone));
+      return { ...c, i, dup };
+    }).sort((a, b) => (Number(Boolean(a.dup)) - Number(Boolean(b.dup))) || (b.roles.length - a.roles.length) || a.name.localeCompare(b.name, "ko"));
+    const withRole = rows.filter((r) => r.roles.length && !r.dup).length;
+    const dupCount = rows.filter((r) => r.dup).length;
+    openSheet({
+      title: "연락처 가져오기",
+      submit: "가져오기",
+      body: `<p>연락처 <strong>${rows.length}개</strong>를 찾았어요. 이름에 업무(찬모·서빙·설거지)가 적힌 <strong>${withRole}명</strong>을 미리 골라 뒀어요.${dupCount ? ` 이미 등록된 ${dupCount}명은 건너뛰어요 (앱에 사진이 없으면 사진만 채워요).` : ""}</p>
+        <p class="hint">구직자가 아닌 분(가족, 식당 등)은 체크를 풀어 주세요.</p>
+        <input class="search" id="import-q" type="search" placeholder="이름·번호로 찾기" style="margin-top:10px" />
+        <div class="btn-row" style="margin:0 0 12px"><button type="button" class="btn" data-pick="roles">업무 적힌 사람만</button><button type="button" class="btn" data-pick="none">모두 해제</button></div>
+        <div id="import-list">${rows.map((r) => `<label class="pick-row" data-text="${esc(`${r.full} ${r.phone}`)}">
+          <input type="checkbox" name="pick" value="${r.i}" ${r.roles.length && !r.dup ? "checked" : ""} ${r.dup ? "disabled" : ""} />
+          ${r.photo ? `<img class="avatar" src="${esc(r.photo)}" alt="" />` : `<span class="avatar">${esc(r.name.slice(0, 1))}</span>`}
+          <span><strong>${esc(r.name)}</strong> ${r.roles.length ? `<span class="tag">${esc(r.roles.join("·"))}</span>` : `<span class="tag warn">업무 없음</span>`}${r.dup ? `<span class="tag">이미 등록됨</span>` : ""}
+          <small class="muted" style="display:block">${esc(r.phone)}${r.extra ? ` · ${esc(r.extra)}` : ""}</small></span></label>`).join("")}</div>`,
+      onReady: (form) => {
+        form.querySelector("#import-q").addEventListener("input", (e) => {
+          const q = e.target.value.trim();
+          form.querySelectorAll(".pick-row").forEach((row) => { row.hidden = Boolean(q) && !row.dataset.text.includes(q); });
+        });
+        form.querySelector(".sheet-body").addEventListener("click", (e) => {
+          const b = e.target.closest("[data-pick]");
+          if (!b) return;
+          form.querySelectorAll("input[name=pick]:not(:disabled)").forEach((box) => {
+            box.checked = b.dataset.pick === "roles" ? list[box.value].roles.length > 0 : false;
+          });
+        });
+      },
+      onSubmit: (fd) => {
+        const picked = fd.getAll("pick").map((v) => list[Number(v)]);
+        const dups = rows.filter((r) => r.dup && r.photo && !photos.get(r.dup.id));
+        if (!picked.length && !dups.length) { toast("가져올 사람을 골라 주세요"); return false; }
+        toast("가져오는 중이에요…");
+        (async () => {
+          for (const c of picked) {
+            const id = uid();
+            state.workers.push({ id, active: true, name: c.name, phone: c.phone, roles: c.roles, area: "", joined: "", memo: c.extra });
+            if (c.photo) await setPhoto(id, await shrinkImage(c.photo));
+          }
+          for (const r of dups) await setPhoto(r.dup.id, await shrinkImage(r.photo));
+          save();
+          ui.peopleMode = "workers";
+          go({ name: "people" });
+          const noRole = picked.filter((c) => !c.roles.length).length;
+          toast(`${picked.length}명을 가져왔어요${noRole ? `. 업무 미정 ${noRole}명은 업무를 골라 주세요` : ""}`);
+        })();
+      },
+    });
+  };
+  $("#vcf-file").addEventListener("change", async (e) => {
+    const file = e.target.files[0];
+    e.target.value = "";
+    if (!file) return;
+    try {
+      const list = parseVcf(await file.text());
+      if (!list.length) { toast("전화번호가 있는 연락처를 찾지 못했어요. 파일을 확인해 주세요."); return; }
+      importContacts(list);
+    } catch (_) {
+      toast("연락처 파일을 읽지 못했어요.");
     }
   });
 
@@ -779,6 +1027,7 @@
       if (!w || !confirm(`${w.name}님과 이 분의 모든 기록을 지울까요?\n되돌릴 수 없어요. 숨기기를 먼저 고려해 주세요.`)) return;
       state.workers = state.workers.filter((x) => x.id !== w.id);
       state.assigns = state.assigns.filter((a) => a.workerId !== w.id);
+      removePhoto(w.id);
       save();
       history.back();
       toast("지웠어요");
@@ -816,12 +1065,15 @@
     "del-script": (el) => { if (!confirm("이 문구를 지울까요?")) return; state.scripts = state.scripts.filter((s) => s.id !== el.dataset.id); sheet.close(); refresh(); },
     "backup": doBackup,
     "import": () => $("#import-file").click(),
+    "import-vcf": () => $("#vcf-file").click(),
     "save-fee": () => { const n = Number($("#fee-rate").value); if (!(n >= 0 && n <= 100)) { toast("0~100 사이로 적어 주세요"); return; } state.feeRate = n; refresh(); toast("저장했어요"); },
     "seed": seed,
     "wipe": () => {
       if (!confirm("정말 모든 자료를 지울까요? 백업 파일이 없으면 되돌릴 수 없어요.")) return;
       if (!confirm("한 번 더 확인할게요. 모두 지울까요?")) return;
       state = blank();
+      photos.clear();
+      photoDb.clear().catch(() => {});
       refresh();
       toast("모두 지웠어요");
     },
@@ -846,5 +1098,10 @@
     navigator.serviceWorker.register("sw.js").catch(() => {});
   }
 
+  // 사진을 먼저 불러온 뒤 화면을 그림 (사진을 못 불러와도 화면은 그림)
+  photoDb.all()
+    .then((list) => list.forEach(([id, url]) => photos.set(id, url)))
+    .catch(() => {})
+    .finally(render);
   render();
 })();

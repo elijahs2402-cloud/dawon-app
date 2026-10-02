@@ -118,6 +118,17 @@ p { margin: 0 0 8px; }
 .tag { display: inline-block; border-radius: 8px; padding: 1px 8px; font-size: .8rem; font-weight: 600; background: #f5ede6; color: var(--muted); margin-left: 4px; }
 .tag.warn { background: var(--warn-soft); color: var(--warn); }
 
+/* 얼굴 사진 */
+.who { display: flex; align-items: center; gap: 12px; }
+.who > div, .who > span:not(.avatar) { min-width: 0; flex: 1; }
+.who[hidden] { display: none; }
+.avatar { width: 48px; height: 48px; border-radius: 50%; object-fit: cover; flex: none; display: inline-grid; place-items: center; background: #f5ede6; color: var(--muted); font-weight: 700; font-size: 1.1rem; }
+.avatar.big { width: 76px; height: 76px; font-size: 1.6rem; }
+.pick-row { display: flex; align-items: center; gap: 12px; padding: 10px 4px; border-top: 1px solid var(--line); cursor: pointer; }
+.pick-row[hidden] { display: none; }
+.pick-row input { width: 24px; height: 24px; margin: 0; flex: none; accent-color: var(--pri); }
+.pick-row > span:last-child { min-width: 0; flex: 1; }
+
 /* 사람 줄 */
 .person-row { padding: 14px 0; border-top: 1px solid var(--line); }
 .person-row:first-of-type { border-top: 0; padding-top: 4px; }
