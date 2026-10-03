@@ -2,7 +2,7 @@
   "use strict";
 
   // 앱 버전(APP_VERSION): 백업 화면에 표시. sw.js의 CACHE 이름과 같이 올림
-  const APP_VERSION = "v33";
+  const APP_VERSION = "v34";
   // 저장소 이름(KEY): 휴대폰 브라우저 안에 자료를 저장할 때 쓰는 이름
   const KEY = "dawon-mobile-v1";
   // 업무 종류(ROLES)
@@ -678,11 +678,10 @@
   };
 
   const candidateRow = (c, j, full) => {
-    const { w, s, t, near, busy } = c;
+    const { w, t, near, busy } = c;
     return `<div class="person-row">
       <div class="who">${avatar(w)}<div>
-      <div class="name-line"><button class="name-link" data-act="open-worker" data-id="${w.id}">${esc(w.name)}</button>${badge(t)}${near ? `<span class="tag">가까움</span>` : ""}${busy ? `<span class="tag warn">같은 시간 다른 일</span>` : ""}</div>
-      <div class="status-line muted">${statLine(s)} · ${s.lastWork ? `마지막 근무 ${esc(dateText(s.lastWork))}` : "근무 기록 없음"}${w.area ? ` · ${esc(w.area)}` : ""}</div></div></div>
+      <div class="name-line"><button class="name-link" data-act="open-worker" data-id="${w.id}">${esc(w.name)}</button>${badge(t)}${near ? `<span class="tag">가까움</span>` : ""}${busy ? `<span class="tag warn">같은 시간 다른 일</span>` : ""}</div></div></div>
       <div class="btn-row">${contactButtons(w, j, offerMsg(j, w), icon("message") + "일 제안")}
         <button class="btn primary" data-act="add-assign" data-v="confirmed" data-worker="${w.id}" data-job="${j.id}" ${full || busy ? "disabled" : ""}>${icon("check")}확정</button>
         <button class="btn" data-act="add-assign" data-v="standby" data-worker="${w.id}" data-job="${j.id}">대기로</button>
