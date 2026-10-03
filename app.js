@@ -2,7 +2,7 @@
   "use strict";
 
   // 앱 버전(APP_VERSION): 백업 화면에 표시. sw.js의 CACHE 이름과 같이 올림
-  const APP_VERSION = "v23";
+  const APP_VERSION = "v24";
   // 저장소 이름(KEY): 휴대폰 브라우저 안에 자료를 저장할 때 쓰는 이름
   const KEY = "dawon-mobile-v1";
   // 업무 종류(ROLES)
@@ -365,8 +365,8 @@
   };
   const letter = (...blocks) => blocks.filter(Boolean).join("\n\n");
   const shortDate = (d) => dateText(d).replace(/^(오늘|내일|어제) /, "");
-  // 시간 줄: "06:00~11:00 (4시간 30분, 휴게 30분)" — 근무시간은 휴게를 뺀 시간
-  const timeLine = (j) => `${j.start}~${j.end} (${hoursText(workMinutes(j.start, j.end, j.breakMin))}${j.breakMin ? `, 휴게 ${hoursText(Number(j.breakMin))}` : ""})`;
+  // 시간 줄: 구직자 문자도 식당 문자와 같은 "오전 6시 ~ 오후 3시(9시간)" 모양 (근무시간은 휴게를 뺀 시간)
+  const timeLine = (j) => korRange(j);
 
   // 일 제안 문자
   const offerMsg = (j, w) => {
@@ -394,7 +394,7 @@
     const days = groupOf(j).filter((x) => state.assigns.some((a) => a.jobId === x.id && a.workerId === w.id && a.status === "confirmed"));
     return letter(
       `[다원] ${w.name}님 확정됐어요!`,
-      section("근무", `${dateText(j.date)} ${timeLine(j)}`, `${r?.name || ""} ${j.role}`, `${j.start}까지 가시면 돼요.`),
+      section("근무", `${dateText(j.date)} ${timeLine(j)}`, `${r?.name || ""} ${j.role}`, `${korTime(j.start)}까지 가시면 돼요.`),
       days.length > 1 ? section("근무일", `${days.map((x) => shortDate(x.date)).join(", ")} (${days.length}일)`) : "",
       section("급여", payText(j)),
       road ? section("주소", road, r.addrDetail) : "",
@@ -419,7 +419,7 @@
     jobs.forEach((x) => {
       // 확정된 분마다: 업무 이름님 / 근무시간 / 연락처
       confirmedOf(x).map((a) => worker(a.workerId)).filter(Boolean)
-        .forEach((w) => sent.push([`${x.role} ${w.name}님`, korRange(x), w.phone ? normPhone(w.phone) : ""].filter(Boolean).join("\n")));
+        .forEach((w) => sent.push(`${x.role} ${w.name}님\n${korRange(x)}${w.phone ? `\n\n${normPhone(w.phone)}` : ""}`));
       if (jobNeed(x)) left.push(`${x.role} ${jobNeed(x)}명`);
     });
     if (!sent.length) {
