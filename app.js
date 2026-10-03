@@ -2,7 +2,7 @@
   "use strict";
 
   // 앱 버전(APP_VERSION): 백업 화면에 표시. sw.js의 CACHE 이름과 같이 올림
-  const APP_VERSION = "v29";
+  const APP_VERSION = "v30";
   // 저장소 이름(KEY): 휴대폰 브라우저 안에 자료를 저장할 때 쓰는 이름
   const KEY = "dawon-mobile-v1";
   // 업무 종류(ROLES)
@@ -569,10 +569,9 @@
   const checkRow = ({ a, j, w }) => `<div class="check-row">
       <div class="who">${avatar(w)}<div><button class="name-link" data-act="open-worker" data-id="${w.id}">${esc(w.name)}</button>
       <div class="muted small">${esc(dateText(j.date))} · ${esc(restName(j))} ${esc(j.role)}</div></div></div>
-      <div class="btn-row three">
+      <div class="btn-row">
         <button class="btn ok" data-act="outcome" data-id="${a.id}" data-v="done">${icon("check")}출근함</button>
-        <button class="btn warn" data-act="cancel-ask" data-id="${a.id}">${icon("alert")}취소</button>
-        <button class="btn bad" data-act="outcome" data-id="${a.id}" data-v="noshow">${icon("x")}안 나옴</button>
+        <button class="btn warn" data-act="cancel-ask" data-id="${a.id}">${icon("x")}확정 취소</button>
       </div></div>`;
 
   const renderHome = () => {
@@ -652,8 +651,8 @@
       // 문자 버튼: 오늘·앞으로의 일 / 출근 체크 버튼: 오늘·지난 일 (오늘은 둘 다)
       const msgBtns = `${contactButtons(w, j, confirmMsg(j, w), icon("message") + "확정 문자")}
            ${rest(j.restaurantId)?.phone ? `<a class="btn" href="${smsHref(rest(j.restaurantId).phone, restMsg(j, w))}">${icon("message")}식당에 알림</a>` : `<button class="btn" data-act="copy-rest-msg" data-id="${a.id}">식당 문자 복사</button>`}`;
-      const outcomeBtns = `<button class="btn ok" data-act="outcome" data-id="${a.id}" data-v="done">${icon("check")}출근함</button>
-           <button class="btn bad" data-act="outcome" data-id="${a.id}" data-v="noshow">${icon("x")}안 나옴</button>`;
+      // '안 나옴'은 확정 취소 창 안의 이유로 옮김
+      const outcomeBtns = `<button class="btn ok" data-act="outcome" data-id="${a.id}" data-v="done">${icon("check")}출근함</button>`;
       const cancelBtn = `<button class="btn warn" data-act="cancel-ask" data-id="${a.id}">${icon("x")}확정 취소</button>`;
       if (j.date < today()) buttons = `${outcomeBtns}${cancelBtn}${w.phone ? `<a class="btn" href="${telHref(w.phone)}">${icon("phone")}전화</a>` : ""}`;
       else if (j.date === today()) buttons = `${msgBtns}${outcomeBtns}${cancelBtn}`;
@@ -1523,7 +1522,8 @@
         <label class="choice"><input type="radio" name="kind" value="mistake" required /><span><strong>잘못 눌렀어요</strong><small>'대기 중'으로 되돌려요 · 기록에 안 남아요</small></span></label>
         <label class="choice"><input type="radio" name="kind" value="rest_cancel" /><span><strong>식당 사정으로 취소</strong><small>구직자 기록에 불이익 없음</small></span></label>
         <label class="choice"><input type="radio" name="kind" value="cancel_ok" /><span><strong>본인이 미리 알려줬어요</strong><small>하루 전 이상 · 기록에 불이익 없음</small></span></label>
-        <label class="choice"><input type="radio" name="kind" value="late" /><span><strong>본인이 직전에 취소했어요</strong><small>약속 기록에 '직전 취소'로 남아요</small></span></label></div>`,
+        <label class="choice"><input type="radio" name="kind" value="late" /><span><strong>본인이 직전에 취소했어요</strong><small>약속 기록에 '직전 취소'로 남아요</small></span></label>
+        <label class="choice"><input type="radio" name="kind" value="noshow" /><span><strong>연락 없이 안 나왔어요</strong><small>약속 기록에 '안 나옴'으로 남아요</small></span></label></div>`,
       submit: "확정 취소",
       onSubmit: (fd) => {
         const kind = val(fd, "kind");
@@ -1538,7 +1538,7 @@
         setOutcome(a, kind);
         const sb = assignsOf(j.id).find((x) => x.status === "standby");
         if (route.name !== "job") go({ name: "job", id: j.id }); else refresh();
-        toast(sb ? `대기 중인 ${worker(sb.workerId)?.name}님을 확정해 보세요` : "취소로 기록했어요. 다른 분을 찾아보세요.");
+        toast(sb ? `대기 중인 ${worker(sb.workerId)?.name}님을 확정해 보세요` : `${kind === "noshow" ? "안 나옴으로" : "취소로"} 기록했어요. 다른 분을 찾아보세요.`);
       },
     });
   };
