@@ -1,8 +1,8 @@
 (() => {
   "use strict";
 
-  // 앱 버전(APP_VERSION): 백업 화면에 표시. sw.js의 CACHE 이름과 같이 올림
-  const APP_VERSION = "v35";
+  // 앱 버전(APP_VERSION): 설정 화면 맨 아래에 표시. sw.js의 CACHE 이름과 같이 올림
+  const APP_VERSION = "v36";
   // 저장소 이름(KEY): 휴대폰 브라우저 안에 자료를 저장할 때 쓰는 이름
   const KEY = "dawon-mobile-v1";
   // 업무 종류(ROLES)
@@ -598,7 +598,7 @@
 
     if (!hasData) {
       html += `<h2>처음 오셨네요</h2><div class="card"><p>1. <strong>사람 등록</strong>으로 구직자를 적어 주세요.</p><p>2. 식당에서 전화가 오면 <strong>일감 받기</strong>를 누르세요.</p><p>3. 일감 화면에서 추천 순서대로 연락하고 <strong>확정</strong>을 누르면 끝이에요.</p>
-        <p class="muted small">먼저 연습해 보고 싶으면 아래 '백업' 메뉴에서 연습용 예시 자료를 넣을 수 있어요.</p></div>`;
+        <p class="muted small">먼저 연습해 보고 싶으면 아래 '설정' 메뉴에서 연습용 예시 자료를 넣을 수 있어요.</p></div>`;
       return html;
     }
     if (backupDays === null || backupDays >= 7) {
@@ -767,7 +767,7 @@
     return `<div class="segment"><button class="${isW ? "active" : ""}" data-act="people-mode" data-v="workers">구직자 ${state.workers.length}</button><button class="${isW ? "" : "active"}" data-act="people-mode" data-v="restaurants">식당 ${state.restaurants.length}</button></div>
       <button class="btn primary big" data-act="${isW ? "new-worker" : "new-rest"}">${icon("plus")}${isW ? "사람 등록" : "식당 등록"}</button>
       ${isW ? `<button class="btn big" style="margin-top:10px" data-act="import-vcf">${icon("contacts")}연락처 한 번에 불러오기</button>
-        <p class="hint" style="margin-top:6px">연락처 앱에서 <strong>내보내기</strong>로 만든 .vcf 파일을 골라요. 자세한 방법은 백업 화면에 있어요.</p>` : ""}
+        <p class="hint" style="margin-top:6px">연락처 앱에서 <strong>내보내기</strong>로 만든 .vcf 파일을 골라요. 자세한 방법은 설정 화면에 있어요.</p>` : ""}
       <input id="people-q" class="search" style="margin-top:14px" type="search" placeholder="${isW ? "이름·지역·전화번호로 찾기" : "식당 이름·지역으로 찾기"}" value="${esc(ui.peopleQuery)}" />
       ${isW ? `<div class="chips filter-chips">${["", ...ROLES].map((r) => `<button class="${ui.peopleRole === r ? "active" : ""}" data-act="role-filter" data-v="${r}">${r || "전체"}</button>`).join("")}</div>` : ""}
       <div id="people-list">${peopleList()}</div>`;
@@ -815,7 +815,7 @@
     </div>`).join("")}
     <button class="btn big" data-act="new-script">${icon("plus")}새 문구 만들기</button>`;
 
-  // ---------- 화면: 백업·설정 ----------
+  // ---------- 화면: 설정·백업 ----------
   // 메뉴 한 줄: 왼쪽 아이콘 · 제목과 설명 · 오른쪽 화살표
   const menuRow = (act, ic, title, sub, tone = "") => `<button class="menu-row" data-act="${act}">
       <span class="menu-ic ${tone}">${icon(ic)}</span><span class="menu-text"><strong>${title}</strong>${sub ? `<small>${sub}</small>` : ""}</span></button>`;
@@ -832,12 +832,6 @@
       </ol>
       <p>이름이 "김○○ 찬모"처럼 저장돼 있으면 업무도 자동으로 골라져요. 연락처는 이 휴대폰 안에서만 읽고, 다 가져온 뒤엔 .vcf 파일을 '내 파일'에서 지워 주세요.</p>
     </details>
-    <h2>백업</h2>
-    <div class="menu">
-      ${menuRow("backup", "download", "백업 파일 만들기", backupSub, state.lastBackup && daysBetween(state.lastBackup, today()) < 7 ? "" : "warn")}
-      ${menuRow("import", "folder", "백업 파일 불러오기", "휴대폰을 바꿨을 때 자료를 되살려요")}
-    </div>
-    <p class="hint" style="margin:0 4px 0">자료는 이 휴대폰 안에만 있어요. 백업 파일은 '내 파일 → 다운로드'에 저장되고, 카카오톡 '나와의 채팅'에 보내 두면 더 안전해요.</p>
     <h2>설정</h2>
     <div class="card fee-card">
       <span class="menu-ic">${icon("percent")}</span>
@@ -859,6 +853,12 @@
       <p><strong>삼성 인터넷:</strong> 아래 ≡ 메뉴 → '현재 페이지 추가' → '홈 화면'</p>
       <p><strong>아이폰 사파리:</strong> 아래 공유 버튼 → '홈 화면에 추가'</p>
     </details>
+    <h2>백업</h2>
+    <div class="menu">
+      ${menuRow("backup", "download", "백업 파일 만들기", backupSub, state.lastBackup && daysBetween(state.lastBackup, today()) < 7 ? "" : "warn")}
+      ${menuRow("import", "folder", "백업 파일 불러오기", "휴대폰을 바꿨을 때 자료를 되살려요")}
+    </div>
+    <p class="hint" style="margin:0 4px 0">자료는 이 휴대폰 안에만 있어요. 백업 파일은 '내 파일 → 다운로드'에 저장되고, 카카오톡 '나와의 채팅'에 보내 두면 더 안전해요.</p>
     <h2>연습</h2>
     <div class="menu">
       ${menuRow("seed", "play", "연습용 예시 자료 넣기", hasData ? "지금 자료는 그대로 두고 구직자 20명·식당 20곳을 더해요" : "가짜 구직자·식당·일감으로 눌러 볼 수 있어요")}
@@ -869,7 +869,7 @@
   };
 
   // ---------- 그리기 ----------
-  const TITLES = { home: "다원 어머니회", jobs: "일감", people: "사람", scripts: "문자 문구", more: "백업·설정" };
+  const TITLES = { home: "다원 어머니회", jobs: "일감", people: "사람", scripts: "문자 문구", more: "설정·백업" };
   const screens = { home: renderHome, jobs: renderJobs, people: renderPeople, scripts: renderScripts, more: renderMore, job: renderJob, worker: renderWorker };
   const render = () => {
     const tab = { job: "jobs", worker: "people" }[route.name] || route.name;
@@ -1287,7 +1287,7 @@
             const list = parseVcf(await file.text());
             if (!list.length) { toast("전화번호가 있는 연락처를 찾지 못했어요."); return; }
             await fillFromContact(list[0].full, list[0].phone, list[0].photo);
-            if (list.length > 1) toast(`파일에 ${list.length}명이 있어서 첫 번째 분만 넣었어요. 여러 명은 백업 화면에서 불러오세요.`);
+            if (list.length > 1) toast(`파일에 ${list.length}명이 있어서 첫 번째 분만 넣었어요. 여러 명은 설정 화면에서 불러오세요.`);
           } catch (_) {
             toast("연락처 파일을 읽지 못했어요.");
           }
