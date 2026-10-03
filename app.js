@@ -2,7 +2,7 @@
   "use strict";
 
   // 앱 버전(APP_VERSION): 백업 화면에 표시. sw.js의 CACHE 이름과 같이 올림
-  const APP_VERSION = "v20";
+  const APP_VERSION = "v21";
   // 저장소 이름(KEY): 휴대폰 브라우저 안에 자료를 저장할 때 쓰는 이름
   const KEY = "dawon-mobile-v1";
   // 업무 종류(ROLES)
@@ -365,7 +365,8 @@
   };
   const letter = (...blocks) => blocks.filter(Boolean).join("\n\n");
   const shortDate = (d) => dateText(d).replace(/^(오늘|내일|어제) /, "");
-  const timeLine = (j) => `${j.start}~${j.end}${j.breakMin ? ` (휴게 ${hoursText(Number(j.breakMin))})` : ""}`;
+  // 시간 줄: "06:00~11:00 (4시간 30분, 휴게 30분)" — 근무시간은 휴게를 뺀 시간
+  const timeLine = (j) => `${j.start}~${j.end} (${hoursText(workMinutes(j.start, j.end, j.breakMin))}${j.breakMin ? `, 휴게 ${hoursText(Number(j.breakMin))}` : ""})`;
 
   // 일 제안 문자
   const offerMsg = (j, w) => {
@@ -420,7 +421,7 @@
     if (!sent.length) {
       return letter(
         `[다원] 사장님, ${dateText(j.date)} 요청 잘 받았어요.`,
-        section("요청", jobs.map((x) => `${x.role} ${x.headcount}명 ${x.start}~${x.end}`).join("\n")),
+        section("요청", jobs.map((x) => `${x.role} ${x.headcount}명 ${timeLine(x)}`).join("\n")),
         "사람 구해지면 바로 연락드릴게요.",
       );
     }
