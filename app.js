@@ -2,7 +2,7 @@
   "use strict";
 
   // 앱 버전(APP_VERSION): 백업 화면에 표시. sw.js의 CACHE 이름과 같이 올림
-  const APP_VERSION = "v34";
+  const APP_VERSION = "v35";
   // 저장소 이름(KEY): 휴대폰 브라우저 안에 자료를 저장할 때 쓰는 이름
   const KEY = "dawon-mobile-v1";
   // 업무 종류(ROLES)
@@ -121,7 +121,6 @@
     { id: "s2", title: "일 언제 주냐는 연락", kind: "sms", text: "연락 주셔서 고마워요.\n\n요즘 약속 잘 지켜주시는 분들께 먼저 연락드리고 있어요.\n자리 나면 꼭 챙겨드릴게요." },
     { id: "s3", title: "술 드시고 온 전화 (말로 할 때)", kind: "talk", text: "오늘은 늦었으니까 내일 맑은 정신으로 얘기해요. 제가 내일 꼭 전화드릴게요. 푹 쉬세요." },
     { id: "s4", title: "직전 취소 연락 받았을 때", kind: "sms", text: "알려주셔서 고마워요.\n\n다음부터는 하루 전까지만 알려주시면 식당에 미리 말씀드릴 수 있어요.\n\n몸 잘 챙기세요." },
-    { id: "s5", title: "대기 부탁", kind: "sms", text: "혹시 내일 빈자리가 생기면 바로 나가실 수 있을까요?\n\n대기해 주시면 다음 일 먼저 챙겨드릴게요." },
     { id: "s6", title: "처음 가입한 분 안내", kind: "sms", text: "[다원] 가입해 주셔서 고마워요.\n\n[일 순서]\n약속 잘 지켜주시는 분들께 먼저 연락드려요.\n\n[취소할 때]\n못 가시게 되면 꼭 하루 전까지 알려주세요.\n\n[밤에 연락할 때]\n문자 남겨주시면 아침에 연락드릴게요." },
   ];
   // 예전(이모티콘 있던) 기본 문구: 엄마가 고치지 않고 그대로 쓰는 문구만 새 문구로 바꿔 줌
@@ -133,6 +132,8 @@
     s5: "혹시 내일 빈자리가 생기면 바로 나가실 수 있을까요? 대기해 주시면 다음 일 먼저 챙겨드릴게요 😊",
     s6: "[다원] 가입해 주셔서 고마워요 😊 일은 약속 잘 지켜주시는 분들께 먼저 연락드려요. 못 가시게 되면 꼭 하루 전까지 알려주세요. 밤에는 문자 남겨주시면 아침에 연락드릴게요~",
   };
+  // 빼기로 한 '대기 부탁' 문구 (엄마가 고치지 않은 그대로일 때만 지움)
+  const STANDBY_TEXTS = [OLD_SCRIPT_TEXT.s5, "혹시 내일 빈자리가 생기면 바로 나가실 수 있을까요?\n\n대기해 주시면 다음 일 먼저 챙겨드릴게요."];
   const refreshOldScripts = (scripts) => {
     const fresh = Object.fromEntries(defaultScripts().map((x) => [x.id, x.text]));
     return (scripts || []).map((x) => (OLD_SCRIPT_TEXT[x.id] && x.text === OLD_SCRIPT_TEXT[x.id] ? { ...x, text: fresh[x.id] } : x));
@@ -144,7 +145,13 @@
   const load = () => {
     try {
       const saved = JSON.parse(localStorage.getItem(KEY));
-      if (isValidData(saved)) { const st = { ...blank(), ...saved }; st.scripts = refreshOldScripts(st.scripts); return st; }
+      if (isValidData(saved)) {
+        const st = { ...blank(), ...saved };
+        st.scripts = refreshOldScripts((st.scripts || []).filter((x) => !(x.id === "s5" && STANDBY_TEXTS.includes(x.text))));
+        // 대기 기능을 뺐으므로 '대기 중'이던 분은 '연락함'으로 바꿈
+        st.assigns.forEach((a) => { if (a.status === "standby") a.status = "asked"; });
+        return st;
+      }
     } catch (_) {}
     return blank();
   };
@@ -350,7 +357,7 @@
       .map((x) => ({ ...x, near: Boolean(r?.area && x.w.area && (r.area.includes(x.w.area.trim()) || x.w.area.includes(r.area.trim()))), busy: busyFor(x.w.id, j) }))
       .sort((x, y) => (x.busy - y.busy) || (x.t.level - y.t.level) || (Number(y.near) - Number(x.near)) || byPriority(x, y));
   };
-  // 업무별 대기 순서에서 몇 번째인지 (재촉 전화 받을 때 확인용)
+  // 업무별 추천 순서에서 몇 번째인지 (재촉 전화 받을 때 확인용)
   const rankIn = (role, workerId) => {
     const list = ranked(state.workers.filter((w) => w.active !== false && (w.roles || []).includes(role))).sort(byPriority);
     return { pos: list.findIndex((x) => x.w.id === workerId) + 1, total: list.length };
@@ -438,13 +445,6 @@
   };
   // 사람 줄의 '식당에 알림'도 일감 화면의 '식당 문자'와 같은 내용
   const restMsg = (j) => restJobMsg(j);
-  // 대기 부탁 문자
-  const standbyMsg = (j, w) => letter(
-    `[다원] ${w.name}님, 대기 부탁드려요.`,
-    section("근무", `${dateText(j.date)} ${timeLine(j)}`, `${restName(j)} ${j.role}`),
-    "빈자리가 생기면 바로 연락드릴게요.\n대기해 주시면 다음 일 먼저 챙겨드려요.",
-  );
-
   // ---------- 알림(토스트) ----------
   let toastTimer;
   const toast = (msg) => {
@@ -543,14 +543,13 @@
   const jobCard = (j) => {
     const need = jobNeed(j);
     const conf = confirmedOf(j).length;
-    const sb = assignsOf(j.id).filter((a) => a.status === "standby").length;
     const past = j.date < today();
     const g = groupOf(j);
     return `<button class="job-card ${need ? "need" : "full"} ${past ? "past" : ""}" data-act="open-job" data-id="${j.id}">
       <div class="job-when">${esc(dateText(j.date))} · ${esc(j.start)}~${esc(j.end)}${g.length > 1 ? ` <span class="pill gray">${g.length}일 연속 · ${g.indexOf(j) + 1}일째</span>` : ""}</div>
       <div class="job-what"><strong>${esc(restName(j))}</strong><span class="role">${esc(j.role)}</span></div>
       <div class="job-state">${need ? `<span class="pill need">${need}명 더 필요</span>` : `<span class="pill ok">인원 다 참</span>`}
-      <span class="muted">확정 ${conf}/${esc(j.headcount)}명${sb ? ` · 대기 ${sb}명` : ""}</span></div></button>`;
+      <span class="muted">확정 ${conf}/${esc(j.headcount)}명</span></div></button>`;
   };
   const sortJobs = (a, b) => a.date.localeCompare(b.date) || (a.start || "").localeCompare(b.start || "");
   // 여러 날 일감 묶음: 같은 group 번호를 가진 일감들 (날짜순). 묶음이 아니면 자기 하나
@@ -627,7 +626,7 @@
   };
 
   // ---------- 화면: 일감 하나 ----------
-  const statusText = { asked: "연락함", standby: "대기 중", confirmed: "확정", canceled: "취소" };
+  const statusText = { asked: "연락함", standby: "연락함", confirmed: "확정", canceled: "취소" };
   const outcomeText = { done: icon("check") + "출근함", late: icon("alert") + "직전 취소", noshow: icon("x") + "안 나옴", cancel_ok: "미리 알리고 취소", rest_cancel: "식당 사정 취소" };
 
   const contactButtons = (w, j, msg, msgLabel = icon("message") + "문자") => w.phone
@@ -659,16 +658,10 @@
       if (j.date < today()) buttons = `${outcomeBtns}${cancelBtn}${w.phone ? `<a class="btn" href="${telHref(w.phone)}">${icon("phone")}전화</a>` : ""}`;
       else if (j.date === today()) buttons = `${msgBtns}${outcomeBtns}${cancelBtn}`;
       else buttons = `${msgBtns}${cancelBtn}`;
-    } else if (a.status === "standby") {
-      state_ = `<span class="pill gray">대기 중</span>`;
-      buttons = `${contactButtons(w, j, standbyMsg(j, w))}
-        <button class="btn primary" data-act="set-status" data-id="${a.id}" data-v="confirmed">${icon("check")}확정</button>
-        <button class="btn ghost" data-act="remove-assign" data-id="${a.id}">빼기</button>`;
     } else if (a.status === "asked") {
       state_ = `<span class="pill gray">연락함 · 답 기다리는 중</span>`;
       buttons = `${contactButtons(w, j, offerMsg(j, w))}
         <button class="btn primary" data-act="set-status" data-id="${a.id}" data-v="confirmed">${icon("check")}확정</button>
-        <button class="btn" data-act="set-status" data-id="${a.id}" data-v="standby">대기로</button>
         <button class="btn ghost" data-act="remove-assign" data-id="${a.id}">빼기 (못 한대요)</button>`;
     } else {
       state_ = `<span class="pill gray">${outcomeText[a.outcome] || "취소"}</span>`;
@@ -684,7 +677,6 @@
       <div class="name-line"><button class="name-link" data-act="open-worker" data-id="${w.id}">${esc(w.name)}</button>${badge(t)}${near ? `<span class="tag">가까움</span>` : ""}${busy ? `<span class="tag warn">같은 시간 다른 일</span>` : ""}</div></div></div>
       <div class="btn-row">${contactButtons(w, j, offerMsg(j, w), icon("message") + "일 제안")}
         <button class="btn primary" data-act="add-assign" data-v="confirmed" data-worker="${w.id}" data-job="${j.id}" ${full || busy ? "disabled" : ""}>${icon("check")}확정</button>
-        <button class="btn" data-act="add-assign" data-v="standby" data-worker="${w.id}" data-job="${j.id}">대기로</button>
       </div></div>`;
   };
 
@@ -693,9 +685,8 @@
     if (!j) return `<div class="empty">일감을 찾을 수 없어요.</div>`;
     const r = rest(j.restaurantId);
     const need = jobNeed(j);
-    const order = { confirmed: 0, standby: 1, asked: 2, canceled: 3 };
+    const order = { confirmed: 0, asked: 1, canceled: 2 };
     const list = assignsOf(j.id).sort((x, y) => order[x.status] - order[y.status]);
-    const standby = list.filter((a) => a.status === "standby");
     const cands = candidatesFor(j);
     const limit = ui.showAll[j.id] ? cands.length : 6;
 
@@ -723,11 +714,10 @@
       <button class="map-link add-role" data-act="add-role" data-id="${j.id}">${icon("plus")}같은 식당·날짜로 업무 추가</button>
     </div>`;
 
-    if (need && standby.length) html += `<div class="banner need">대기 중인 분이 ${standby.length}명 있어요. 아래에서 바로 <strong>확정</strong>하세요.</div>`;
-    else if (need) html += `<div class="banner need">${need}명 더 필요해요</div>`;
+    if (need) html += `<div class="banner need">${need}명 더 필요해요</div>`;
     else html += `<div class="banner ok">${icon("check")}인원이 다 찼어요</div>`;
 
-    // 확정된 분은 따로 묶어 파란 띠 카드로 맨 위에, 나머지(대기·연락함·취소)는 그 아래
+    // 확정된 분은 따로 묶어 맨 위에, 나머지(연락함·취소)는 그 아래
     const confList = list.filter((a) => a.status === "confirmed");
     const restList = list.filter((a) => a.status !== "confirmed");
     // 카드 맨 위: "2/3명 확정" + 진행 막대 (토스식)
@@ -807,7 +797,7 @@
     </div>
     <h2>약속 기록</h2>
     <div class="stat-grid"><div><strong>${s.done}</strong><small>${icon("check")}출근</small></div><div><strong>${s.late}</strong><small>${icon("alert")}직전취소</small></div><div><strong>${s.noshow}</strong><small>${icon("x")}안 나옴</small></div><div><strong>${s.rehire}</strong><small>${icon("heart", "fill")}또 찾음</small></div></div>
-    ${ranks.length ? `<div class="card"><p style="margin:0"><strong>지금 대기 순서</strong></p>${ranks.map((r) => `<p class="small" style="margin:4px 0 0">${esc(r.role)}: ${r.total}명 중 <strong>${r.pos}번째</strong></p>`).join("")}<p class="hint">약속 잘 지키고 오래 쉰 분이 앞 순서예요. 재촉 전화가 오면 참고하세요.</p></div>` : ""}
+    ${ranks.length ? `<div class="card"><p style="margin:0"><strong>지금 추천 순서</strong></p>${ranks.map((r) => `<p class="small" style="margin:4px 0 0">${esc(r.role)}: ${r.total}명 중 <strong>${r.pos}번째</strong></p>`).join("")}<p class="hint">약속 잘 지키고 오래 쉰 분이 앞 순서예요. 재촉 전화가 오면 참고하세요.</p></div>` : ""}
     <h2>예정된 일</h2>${upcoming.length ? `<div class="card"><ul class="history">${upcoming.map(line).join("")}</ul></div>` : `<div class="empty">없어요</div>`}
     <h2>지난 기록</h2>${past.length ? `<div class="card"><ul class="history">${past.map(line).join("")}</ul></div>` : `<div class="empty">없어요</div>`}
     <div class="danger-zone"><button class="btn big" data-act="toggle-active" data-id="${w.id}">${w.active === false ? "명단에 다시 보이기" : "명단에서 숨기기 (기록은 남음)"}</button>
@@ -1526,7 +1516,7 @@
     openSheet({
       title: `${w?.name || ""}님 확정 취소`,
       body: `<p>왜 취소하나요?</p><div class="choice-list">
-        <label class="choice"><input type="radio" name="kind" value="mistake" required /><span><strong>잘못 눌렀어요</strong><small>'대기 중'으로 되돌려요 · 기록에 안 남아요</small></span></label>
+        <label class="choice"><input type="radio" name="kind" value="mistake" required /><span><strong>잘못 눌렀어요</strong><small>명단에서 빼고 추천 순서로 돌려요 · 기록에 안 남아요</small></span></label>
         <label class="choice"><input type="radio" name="kind" value="rest_cancel" /><span><strong>식당 사정으로 취소</strong><small>구직자 기록에 불이익 없음</small></span></label>
         <label class="choice"><input type="radio" name="kind" value="cancel_ok" /><span><strong>본인이 미리 알려줬어요</strong><small>하루 전 이상 · 기록에 불이익 없음</small></span></label>
         <label class="choice"><input type="radio" name="kind" value="late" /><span><strong>본인이 직전에 취소했어요</strong><small>약속 기록에 '직전 취소'로 남아요</small></span></label>
@@ -1535,17 +1525,16 @@
       onSubmit: (fd) => {
         const kind = val(fd, "kind");
         const j = job(a.jobId);
-        // 잘못 누른 경우: 취소 기록 없이 '대기 중'으로만 되돌림
+        // 잘못 누른 경우: 취소 기록 없이 명단에서만 뺌 (추천 순서에 다시 나옴)
         if (kind === "mistake") {
-          a.status = "standby"; a.outcome = ""; a.fee = 0; a.rehire = false; save();
+          state.assigns = state.assigns.filter((x) => x.id !== a.id); save();
           if (route.name !== "job") go({ name: "job", id: j.id }); else refresh();
-          toast("대기 중으로 되돌렸어요");
+          toast("확정을 취소했어요. 기록에는 안 남아요");
           return;
         }
         setOutcome(a, kind);
-        const sb = assignsOf(j.id).find((x) => x.status === "standby");
         if (route.name !== "job") go({ name: "job", id: j.id }); else refresh();
-        toast(sb ? `대기 중인 ${worker(sb.workerId)?.name}님을 확정해 보세요` : `${kind === "noshow" ? "안 나옴으로" : "취소로"} 기록했어요. 다른 분을 찾아보세요.`);
+        toast(`${kind === "noshow" ? "안 나옴으로" : "취소로"} 기록했어요. 다른 분을 찾아보세요.`);
       },
     });
   };
@@ -1630,6 +1619,8 @@
       if (!confirm(`백업 파일을 불러오면 지금 휴대폰의 자료가 백업 내용으로 바뀌어요.\n(구직자 ${data.workers.length}명, 일감 ${data.jobs.length}건)\n계속할까요?`)) return;
       const { photos: savedPhotos = {}, ...rest } = data;
       state = { ...blank(), ...rest };
+      // 예전 백업의 '대기 중'은 '연락함'으로 바꿈
+      state.assigns.forEach((a) => { if (a.status === "standby") a.status = "asked"; });
       photos.clear();
       await photoDb.clear().catch(() => {});
       for (const [id, url] of Object.entries(savedPhotos)) await setPhoto(id, url);
@@ -1844,7 +1835,7 @@
     },
     "add-assign": (el) => {
       if (el.dataset.v === "confirmed") { confirmFlow(el.dataset.worker, el.dataset.job); return; }
-      addAssign(el.dataset.worker, el.dataset.job, el.dataset.v); render(); toast("대기로 넣었어요");
+      addAssign(el.dataset.worker, el.dataset.job, el.dataset.v); render();
     },
     "contacted": (el) => {
       // 전화/문자 앱이 열린 뒤에 기록 (링크 동작을 막지 않음)
