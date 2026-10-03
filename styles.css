@@ -464,3 +464,24 @@ body { overflow-x: hidden; }
 .night-field .name-search input { margin-top: 8px; }
 #pay-calc { margin: -6px 0 18px; }
 .night-rate { display: block; margin-top: 2px; color: var(--sub); font-size: .82rem; font-weight: 700; }
+
+/* ---------- 업무 여러 개 (찬모 1·서빙 1) ---------- */
+.role-rows { display: grid; gap: 10px; margin-top: 12px; }
+.role-rows:empty { display: none; }
+.role-row { background: #f9fafb; border-radius: 16px; padding: 12px 14px; display: grid; gap: 8px; }
+.role-row-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.role-row-head strong { font-size: 1.05rem; }
+.stepper.small { margin-top: 0; gap: 6px; }
+.stepper.small button { width: 44px; height: 44px; border-radius: 12px; background: #fff; }
+.stepper.small input { width: 56px !important; min-height: 44px; padding: 8px; border: 0; border-radius: 12px; background: #fff; font: inherit; font-weight: 700; text-align: center; }
+.role-in { width: 100%; min-height: 50px; padding: 12px 14px; border: 0; border-radius: 12px; background: #fff; font: inherit; font-size: 1rem; color: var(--ink); outline: none; }
+.role-in:focus { box-shadow: 0 0 0 2px var(--pri); }
+.night-in { display: flex; gap: 8px; }
+.night-in[hidden] { display: none; }
+.night-in .role-in { flex: 1; min-width: 0; }
+.night-in .name-search-btn { margin-top: 0; }
+.row-calc { font-size: .88rem; color: var(--sub); font-weight: 600; }
+.row-calc:empty { display: none; }
+.row-calc strong { color: var(--pri); }
+.role-tabs { margin-top: 8px; }
+.add-role { margin-top: 12px; }
