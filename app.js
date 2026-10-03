@@ -2,7 +2,7 @@
   "use strict";
 
   // 앱 버전(APP_VERSION): 백업 화면에 표시. sw.js의 CACHE 이름과 같이 올림
-  const APP_VERSION = "v18";
+  const APP_VERSION = "v19";
   // 저장소 이름(KEY): 휴대폰 브라우저 안에 자료를 저장할 때 쓰는 이름
   const KEY = "dawon-mobile-v1";
   // 업무 종류(ROLES)
@@ -352,7 +352,8 @@
   // 확정 문자: 날짜·시간, 주소, 오시는 길, 지도 링크, 식당 전화를 한 줄씩
   const confirmMsg = (j, w) => {
     const r = rest(j.restaurantId);
-    const map = mapUrl(r);
+    // 주소: 휴대폰이 알아보기 쉽게 괄호 속 동 이름을 빼고, 상세 주소는 다음 줄로 (누르면 지도가 열리도록)
+    const road = (r?.address || "").replace(/\s*\([^)]*\)\s*$/, "");
     return [
       `[다원] ${w.name}님 확정됐어요!`,
       `${dateText(j.date)} ${j.start}까지 ${r?.name || ""} 가시면 돼요.`,
@@ -362,9 +363,9 @@
         return days.length > 1 ? `📅 근무일: ${days.map((x) => dateText(x.date).replace(/^(오늘|내일|어제) /, "")).join(", ")} (${days.length}일)` : "";
       })(),
       `⏰ ${j.start}~${j.end}${j.breakMin ? ` (휴게 ${hoursText(Number(j.breakMin))})` : ""} · ${payText(j)}`,
-      r?.address ? `📍 주소: ${fullAddress(r)}` : "",
+      road ? `📍 주소: ${road}${r.addrDetail ? `
+　　 ${r.addrDetail}` : ""}` : "",
       r?.way ? `🚶 오시는 길: ${r.way}` : "",
-      map ? `🗺 지도: ${map}` : "",
       r?.phone ? `☎ 식당 전화: ${r.phone}` : "",
       "혹시 못 가시게 되면 꼭 미리 알려주세요 🙏",
     ].filter(Boolean).join("\n");
