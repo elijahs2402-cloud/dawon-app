@@ -2,7 +2,7 @@
   "use strict";
 
   // 앱 버전(APP_VERSION): 설정 화면 맨 아래에 표시. sw.js의 CACHE 이름과 같이 올림
-  const APP_VERSION = "v36";
+  const APP_VERSION = "v37";
   // 저장소 이름(KEY): 휴대폰 브라우저 안에 자료를 저장할 때 쓰는 이름
   const KEY = "dawon-mobile-v1";
   // 업무 종류(ROLES)
@@ -523,20 +523,57 @@
   let navDir = "tab";
   const isDetail = (r) => r.name === "job" || r.name === "worker";
   const ui = { peopleMode: "workers", peopleQuery: "", peopleRole: "", jobsMode: "upcoming", showAll: {} };
-  const go = (next) => {
-    navDir = isDetail(next) ? "forward" : "tab";
-    route = next;
-    history.pushState(next, "");
+  // 뒤로가기 기록 규칙 (토스 방식)
+  // - 홈이 맨 아래(depth 0), 하단 탭 화면은 그 바로 위(depth 1) 한 칸만 씀 → 휴대폰 뒤로가기: 탭 → 홈 → 앱 나가기
+  // - 일감 보기·사람 보기는 그 위로 한 칸씩 쌓임
+  // - 같은 화면을 다시 열거나 1·2·3일째, 업무 탭처럼 옆 화면으로 바꿀 때는 쌓지 않고 바꿔치기(replace)
+  const depthOf = () => history.state?.depth || 0;
+  const sameRoute = (a, b) => a.name === b.name && (a.id || "") === (b.id || "");
+  let pendingTab = null; // 여러 칸 뒤로 간 다음 바꿔 넣을 탭 화면
+  const go = (next, { replace = false } = {}) => {
+    if (sameRoute(route, next)) { render(); return; }
+    navDir = replace ? "" : isDetail(next) ? "forward" : "tab";
+    if (replace) {
+      route = { ...next, depth: depthOf() };
+      history.replaceState(route, "");
+    } else {
+      route = { ...next, depth: depthOf() + 1 };
+      history.pushState(route, "");
+      window.scrollTo(0, 0);
+    }
     render();
-    window.scrollTo(0, 0);
   };
+  // 하단 탭 누름: 쌓인 화면을 정리하고 홈 바로 위 한 칸에만 놓음
+  const goTab = (name) => {
+    if (sheet.open) sheet.close();
+    const depth = depthOf();
+    if (name === "home") { if (depth > 0) history.go(-depth); else render(); return; }
+    if (depth === 0) { go({ name }); return; }
+    if (depth === 1) { navDir = "tab"; route = { name, depth: 1 }; history.replaceState(route, ""); render(); window.scrollTo(0, 0); return; }
+    pendingTab = name;
+    history.go(-(depth - 1));
+  };
+  // 지운 일감·사람 화면이면 건너뜀
+  const missing = (r) => (r.name === "job" && !job(r.id)) || (r.name === "worker" && !worker(r.id));
   window.addEventListener("popstate", (e) => {
     const prev = route;
-    route = e.state || { name: "home" };
-    navDir = isDetail(prev) ? "back" : "tab";
     if (sheet.open) sheet.close();
+    if (pendingTab) {
+      route = { name: pendingTab, depth: 1 };
+      pendingTab = null;
+      history.replaceState(route, "");
+      navDir = "tab";
+      render();
+      window.scrollTo(0, 0);
+      return;
+    }
+    const next = e.state || { name: "home", depth: 0 };
+    if (missing(next) && (next.depth || 0) > 0) { route = next; history.back(); return; }
+    route = next;
+    navDir = isDetail(prev) ? "back" : "tab";
     render();
   });
+  route = { ...route, depth: 0 };
   history.replaceState(route, "");
 
   // ---------- 화면: 홈 ----------
@@ -1151,7 +1188,8 @@
         }));
         state.jobs.push(...made);
         save();
-        go({ name: "job", id: made[0].id });
+        // '같은 식당·날짜로 업무 추가'(일감 보기에서 만듦)는 쌓지 않고 바꿔치기 → 뒤로가기 한 번에 목록으로
+        go({ name: "job", id: made[0].id }, { replace: Boolean(preset) && route.name === "job" });
         const roleText = perRole.map((p) => `${p.role} ${p.headcount}명`).join("·");
         toast(made.length > 1 ? `${dates.length > 1 ? `${dates.length}일 × ` : ""}${roleText} 일감을 만들었어요` : "일감을 저장했어요. 추천 순서대로 연락해 보세요.");
       },
@@ -1678,7 +1716,7 @@
           for (const r of dups) await setPhoto(r.dup.id, await shrinkImage(r.photo));
           save();
           ui.peopleMode = "workers";
-          go({ name: "people" });
+          goTab("people");
           const noRole = picked.filter((c) => !c.roles.length).length;
           toast(`${picked.length}명을 가져왔어요${noRole ? `. 업무 미정 ${noRole}명은 업무를 골라 주세요` : ""}`);
         })();
@@ -1799,7 +1837,13 @@
       jobForm(null, { restaurantId: j.restaurantId, dates: days.map((x) => x.date), start: j.start, end: j.end, breakMin: j.breakMin, reqByDate });
     },
     "edit-job": (el) => jobForm(job(el.dataset.id)),
-    "open-job": (el) => { if (sheet.open) sheet.close(); go({ name: "job", id: el.dataset.id }); },
+    "open-job": (el) => {
+      if (sheet.open) sheet.close();
+      // 1·2·3일째, 업무 탭(같은 묶음)끼리는 쌓지 않고 바꿔치기
+      const cur = route.name === "job" ? job(route.id) : null;
+      const sibling = cur && [...groupOf(cur), ...reqOf(cur)].some((x) => x.id === el.dataset.id);
+      go({ name: "job", id: el.dataset.id }, { replace: Boolean(sibling) });
+    },
     "del-job": (el) => {
       const j = job(el.dataset.id);
       if (!j || !confirm(`${dateText(j.date)} ${restName(j)} 일감과 연락 기록을 지울까요?`)) return;
@@ -1901,7 +1945,7 @@
   };
   document.addEventListener("click", (e) => {
     const tab = e.target.closest(".tabbar [data-tab]");
-    if (tab) { if (route.name !== tab.dataset.tab) go({ name: tab.dataset.tab }); return; }
+    if (tab) { if (route.name !== tab.dataset.tab) goTab(tab.dataset.tab); return; }
     const el = e.target.closest("[data-act]");
     if (!el || el.disabled) return;
     actions[el.dataset.act]?.(el, e);
