@@ -485,3 +485,19 @@ body { overflow-x: hidden; }
 .row-calc strong { color: var(--pri); }
 .role-tabs { margin-top: 8px; }
 .add-role { margin-top: 12px; }
+
+/* ---------- 업무별 기본 시급 (설정) ---------- */
+.rate-card { padding: 18px 16px; }
+.rate-title { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
+.rate-title strong { display: block; font-size: 1rem; }
+.rate-title small { display: block; color: var(--muted); font-size: .8rem; }
+.rate-head, .rate-row { display: grid; grid-template-columns: 52px 1fr 1.35fr; gap: 6px; align-items: center; }
+.rate-head { color: var(--muted); font-size: .76rem; font-weight: 700; margin-bottom: 4px; }
+.rate-head small { font-weight: 500; }
+.rate-row { margin-bottom: 8px; }
+.rate-row strong { font-size: .95rem; }
+.rate-row input { width: 100%; min-width: 0; min-height: 46px; padding: 10px; border: 0; border-radius: 12px; background: var(--fill); font: inherit; font-size: .95rem; color: var(--ink); outline: none; }
+.rate-row input:focus { background: #fff; box-shadow: 0 0 0 2px var(--pri); }
+.rate-night { display: flex; gap: 4px; min-width: 0; }
+.rate-x { flex: none; border: 0; border-radius: 10px; background: var(--pri-soft); color: var(--pri); font: inherit; font-size: .78rem; font-weight: 700; padding: 0 8px; cursor: pointer; }
+.rate-card .btn.big { margin-top: 6px; }

@@ -2,7 +2,7 @@
   "use strict";
 
   // 앱 버전(APP_VERSION): 백업 화면에 표시. sw.js의 CACHE 이름과 같이 올림
-  const APP_VERSION = "v16";
+  const APP_VERSION = "v17";
   // 저장소 이름(KEY): 휴대폰 브라우저 안에 자료를 저장할 때 쓰는 이름
   const KEY = "dawon-mobile-v1";
   // 업무 종류(ROLES)
@@ -125,7 +125,7 @@
   ];
 
   // ---------- 자료 저장/불러오기 ----------
-  const blank = () => ({ version: 1, restaurants: [], workers: [], jobs: [], assigns: [], scripts: defaultScripts(), feeRate: 10, lastBackup: "" });
+  const blank = () => ({ version: 1, restaurants: [], workers: [], jobs: [], assigns: [], scripts: defaultScripts(), feeRate: 10, rates: {}, lastBackup: "" });
   const isValidData = (s) => s && Array.isArray(s.workers) && Array.isArray(s.jobs) && Array.isArray(s.assigns) && Array.isArray(s.restaurants);
   const load = () => {
     try {
@@ -584,7 +584,6 @@
     if (!w) return "";
     const s = statsOf(w.id);
     const head = `<div class="name-line"><button class="name-link" data-act="open-worker" data-id="${w.id}">${esc(w.name)}</button>${badge(trustOf(s))}</div>`;
-    const started = j.date <= today();
     let state_ = "";
     let buttons = "";
     if (a.status === "confirmed" && a.outcome === "done") {
@@ -593,14 +592,15 @@
         <button class="btn ghost" data-act="undo-assign" data-id="${a.id}">되돌리기</button>`;
     } else if (a.status === "confirmed") {
       state_ = `<span class="pill ok">확정</span>`;
-      buttons = started
-        ? `<button class="btn ok" data-act="outcome" data-id="${a.id}" data-v="done">${icon("check")}출근함</button>
-           <button class="btn bad" data-act="outcome" data-id="${a.id}" data-v="noshow">${icon("x")}안 나옴</button>
-           <button class="btn warn" data-act="cancel-ask" data-id="${a.id}">${icon("alert")}취소 연락옴</button>
-           ${w.phone ? `<a class="btn" href="${telHref(w.phone)}">${icon("phone")}전화</a>` : ""}`
-        : `${contactButtons(w, j, confirmMsg(j, w), icon("message") + "확정 문자")}
-           ${rest(j.restaurantId)?.phone ? `<a class="btn" href="${smsHref(rest(j.restaurantId).phone, restMsg(j, w))}">${icon("message")}식당에 알림</a>` : `<button class="btn" data-act="copy-rest-msg" data-id="${a.id}">식당 문자 복사</button>`}
-           <button class="btn warn" data-act="cancel-ask" data-id="${a.id}">${icon("alert")}취소 연락옴</button>`;
+      // 문자 버튼: 오늘·앞으로의 일 / 출근 체크 버튼: 오늘·지난 일 (오늘은 둘 다)
+      const msgBtns = `${contactButtons(w, j, confirmMsg(j, w), icon("message") + "확정 문자")}
+           ${rest(j.restaurantId)?.phone ? `<a class="btn" href="${smsHref(rest(j.restaurantId).phone, restMsg(j, w))}">${icon("message")}식당에 알림</a>` : `<button class="btn" data-act="copy-rest-msg" data-id="${a.id}">식당 문자 복사</button>`}`;
+      const outcomeBtns = `<button class="btn ok" data-act="outcome" data-id="${a.id}" data-v="done">${icon("check")}출근함</button>
+           <button class="btn bad" data-act="outcome" data-id="${a.id}" data-v="noshow">${icon("x")}안 나옴</button>`;
+      const cancelBtn = `<button class="btn warn" data-act="cancel-ask" data-id="${a.id}">${icon("alert")}취소 연락옴</button>`;
+      if (j.date < today()) buttons = `${outcomeBtns}${cancelBtn}${w.phone ? `<a class="btn" href="${telHref(w.phone)}">${icon("phone")}전화</a>` : ""}`;
+      else if (j.date === today()) buttons = `${msgBtns}${outcomeBtns}${cancelBtn}`;
+      else buttons = `${msgBtns}${cancelBtn}`;
     } else if (a.status === "standby") {
       state_ = `<span class="pill gray">대기 중</span>`;
       buttons = `${contactButtons(w, j, standbyMsg(j, w))}
@@ -788,6 +788,17 @@
       <div class="fee-input"><input id="fee-rate" type="number" inputmode="numeric" min="0" max="100" value="${esc(state.feeRate)}" /><span>%</span></div>
       <button class="btn primary" data-act="save-fee">저장</button>
     </div>
+    <div class="card rate-card">
+      <div class="rate-title"><span class="menu-ic">${icon("edit")}</span><div><strong>업무별 기본 시급</strong><small>일감 받기에서 업무를 고르면 자동으로 들어가요</small></div></div>
+      <div class="rate-head"><span></span><span>낮 시급</span><span>밤 시급 <small>(밤 10시~아침 6시)</small></span></div>
+      ${ROLES.map((r, i) => `<div class="rate-row">
+        <strong>${r}</strong>
+        <input id="rate-d-${i}" inputmode="numeric" placeholder="예: 11000" value="${esc(state.rates?.[r]?.day || "")}" />
+        <span class="rate-night"><input id="rate-n-${i}" inputmode="numeric" placeholder="낮과 같음" value="${esc(state.rates?.[r]?.night || "")}" /><button type="button" class="rate-x" data-act="rate-x" data-i="${i}">1.5배</button></span>
+      </div>`).join("")}
+      <button class="btn primary big" data-act="save-rates">기본 시급 저장</button>
+      <p class="hint" style="margin-top:8px">이미 만든 일감의 시급은 바뀌지 않아요. 식당마다 다르면 일감 받기에서 그 칸만 고치면 돼요.</p>
+    </div>
     <details class="howto"><summary>홈 화면에 앱 아이콘 만들기</summary>
       <p><strong>크롬:</strong> 오른쪽 위 ⋮ 메뉴 → '홈 화면에 추가'</p>
       <p><strong>삼성 인터넷:</strong> 아래 ≡ 메뉴 → '현재 페이지 추가' → '홈 화면'</p>
@@ -875,7 +886,9 @@
     const roleChipsHtml = ROLES.map((r, i) => `<label class="chip"><input type="${roleType}" name="roles" value="${i}" ${j.role === r ? "checked" : ""} /><span>${r}</span></label>`).join("");
     // 업무 한 줄: 인원 + 시급 + (밤 근무면) 밤 시급 + 계산
     const roleRow = (i) => {
-      const mine = existing && existing.role === ROLES[i] ? existing : {};
+      // 고칠 때는 그 일감 값, 새로 받을 때는 설정의 기본 시급
+      const rate = state.rates?.[ROLES[i]] || {};
+      const mine = existing && existing.role === ROLES[i] ? existing : { hourly: rate.day || "", nightHourly: rate.night || "" };
       return `<div class="role-row" data-i="${i}">
         <div class="role-row-head"><strong>${ROLES[i]}</strong>
           <div class="stepper small"><button type="button" data-step="-1" aria-label="줄이기">${icon("minus")}</button><input name="hc_${i}" type="number" min="1" max="20" value="${esc(mine.headcount || 1)}" /><button type="button" data-step="1" aria-label="늘리기">${icon("plus")}</button></div>
@@ -1731,6 +1744,18 @@
     "backup": doBackup,
     "import": () => $("#import-file").click(),
     "import-vcf": () => $("#vcf-file").click(),
+    "save-rates": () => {
+      const n = (id) => Number(String($(`#${id}`)?.value || "").replace(/[^0-9]/g, "")) || 0;
+      state.rates = Object.fromEntries(ROLES.map((r, i) => [r, { day: n(`rate-d-${i}`), night: n(`rate-n-${i}`) }]));
+      refresh();
+      toast("기본 시급을 저장했어요. 다음 일감부터 자동으로 들어가요");
+    },
+    "rate-x": (el) => {
+      const i = el.dataset.i;
+      const day = Number(String($(`#rate-d-${i}`).value).replace(/[^0-9]/g, ""));
+      if (!day) { toast("낮 시급을 먼저 넣어 주세요"); $(`#rate-d-${i}`).focus(); return; }
+      $(`#rate-n-${i}`).value = Math.round(day * 1.5);
+    },
     "save-fee": () => { const n = Number($("#fee-rate").value); if (!(n >= 0 && n <= 100)) { toast("0~100 사이로 적어 주세요"); return; } state.feeRate = n; refresh(); toast("저장했어요"); },
     "seed": seed,
     "wipe": () => {
