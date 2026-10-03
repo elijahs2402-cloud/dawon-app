@@ -2,7 +2,7 @@
   "use strict";
 
   // 앱 버전(APP_VERSION): 설정 화면 맨 아래에 표시. sw.js의 CACHE 이름과 같이 올림
-  const APP_VERSION = "v37";
+  const APP_VERSION = "v38";
   // 저장소 이름(KEY): 휴대폰 브라우저 안에 자료를 저장할 때 쓰는 이름
   const KEY = "dawon-mobile-v1";
   // 업무 종류(ROLES)
@@ -846,7 +846,7 @@
     ${state.scripts.map((s) => `<div class="card">
       <strong>${esc(s.title)}</strong>${s.kind === "talk" ? `<span class="tag">전화로 말할 때</span>` : ""}
       <p class="script-text">${esc(s.text)}</p>
-      <div class="btn-row">${s.kind === "talk" ? "" : `<a class="btn primary" href="${smsHref("", s.text)}">${icon("send")}문자로 보내기</a>`}
+      <div class="btn-row">${s.kind === "talk" ? "" : `<a class="btn primary" href="${smsHref("", s.text)}">${icon("send")}문자 보내기</a>`}
         <button class="btn" data-act="copy-script" data-id="${s.id}">${icon("copy")}복사</button>
         <button class="btn ghost" data-act="edit-script" data-id="${s.id}">${icon("edit")}고치기</button></div>
     </div>`).join("")}
@@ -1821,6 +1821,16 @@
     state.assigns.push(...A);
     refresh();
     toast("연습용 자료를 넣었어요 (구직자 20명, 식당 20곳)");
+    // 연습용 프로필 사진 (AI로 만든 가상 인물, demo-photos 폴더) — 받아지는 대로 넣고 다시 그림
+    Promise.all(W.map(async (w, i) => {
+      try {
+        const res = await fetch(`demo-photos/p${pad(i + 1)}.jpg`);
+        if (!res.ok) return;
+        const blob = await res.blob();
+        const url = await new Promise((ok, no) => { const fr = new FileReader(); fr.onload = () => ok(fr.result); fr.onerror = no; fr.readAsDataURL(blob); });
+        await setPhoto(w.id, url);
+      } catch (_) {}
+    })).then(() => render());
   };
 
   // ---------- 버튼 누름 처리 ----------
