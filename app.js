@@ -2,7 +2,7 @@
   "use strict";
 
   // 앱 버전(APP_VERSION): 백업 화면에 표시. sw.js의 CACHE 이름과 같이 올림
-  const APP_VERSION = "v21";
+  const APP_VERSION = "v22";
   // 저장소 이름(KEY): 휴대폰 브라우저 안에 자료를 저장할 때 쓰는 이름
   const KEY = "dawon-mobile-v1";
   // 업무 종류(ROLES)
@@ -415,7 +415,9 @@
     const sent = [];
     const left = [];
     jobs.forEach((x) => {
-      confirmedOf(x).map((a) => worker(a.workerId)?.name).filter(Boolean).forEach((n) => sent.push(`${x.role} ${n}님 ${x.start}`));
+      // 확정된 분: 업무 이름님 출근시간 · 연락처
+      confirmedOf(x).map((a) => worker(a.workerId)).filter(Boolean)
+        .forEach((w) => sent.push(`${x.role} ${w.name}님 ${x.start}${w.phone ? ` · ${normPhone(w.phone)}` : ""}`));
       if (jobNeed(x)) left.push(`${x.role} ${jobNeed(x)}명`);
     });
     if (!sent.length) {
