@@ -2,7 +2,7 @@
   "use strict";
 
   // 앱 버전(APP_VERSION): 백업 화면에 표시. sw.js의 CACHE 이름과 같이 올림
-  const APP_VERSION = "v22";
+  const APP_VERSION = "v23";
   // 저장소 이름(KEY): 휴대폰 브라우저 안에 자료를 저장할 때 쓰는 이름
   const KEY = "dawon-mobile-v1";
   // 업무 종류(ROLES)
@@ -403,37 +403,41 @@
       "혹시 못 가시게 되면 꼭 미리 알려주세요.",
     );
   };
-  // 식당에 한 사람 알림
-  const restMsg = (j, w) => letter(
-    `[다원] 사장님, ${dateText(j.date)} 보내드릴 분 안내드려요.`,
-    section("출근", `${j.role} ${w.name}님 ${j.start}`),
-    w.phone ? section("연락처", normPhone(w.phone)) : "",
-  );
-  // 식당에 보내는 문자: 같은 요청의 업무를 모아 한 통으로 (확정된 사람·남은 인원)
+  // 시간을 "오전 6시", "오후 3시 30분"처럼
+  const korTime = (t) => {
+    const [h, m] = String(t || "").split(":").map(Number);
+    const part = h === 0 ? "밤" : h < 12 ? "오전" : "오후";
+    return `${part} ${h % 12 || 12}시${m ? ` ${m}분` : ""}`;
+  };
+  // 근무시간: "오전 6시 ~ 오후 3시(9시간)", 휴게가 있으면 "(8시간 30분, 휴게 30분)"
+  const korRange = (j) => `${korTime(j.start)} ~ ${korTime(j.end)}(${hoursText(workMinutes(j.start, j.end, j.breakMin))}${j.breakMin ? `, 휴게 ${hoursText(Number(j.breakMin))}` : ""})`;
+  // 식당에 보내는 문자: 같은 요청의 업무를 모아 한 통으로 (확정된 사람·근무시간·연락처·남은 인원)
   const restJobMsg = (j) => {
     const jobs = reqOf(j);
     const sent = [];
     const left = [];
     jobs.forEach((x) => {
-      // 확정된 분: 업무 이름님 출근시간 · 연락처
+      // 확정된 분마다: 업무 이름님 / 근무시간 / 연락처
       confirmedOf(x).map((a) => worker(a.workerId)).filter(Boolean)
-        .forEach((w) => sent.push(`${x.role} ${w.name}님 ${x.start}${w.phone ? ` · ${normPhone(w.phone)}` : ""}`));
+        .forEach((w) => sent.push([`${x.role} ${w.name}님`, korRange(x), w.phone ? normPhone(w.phone) : ""].filter(Boolean).join("\n")));
       if (jobNeed(x)) left.push(`${x.role} ${jobNeed(x)}명`);
     });
     if (!sent.length) {
       return letter(
         `[다원] 사장님, ${dateText(j.date)} 요청 잘 받았어요.`,
-        section("요청", jobs.map((x) => `${x.role} ${x.headcount}명 ${timeLine(x)}`).join("\n")),
+        section("요청", jobs.map((x) => `${x.role} ${x.headcount}명\n${korRange(x)}`).join("\n\n")),
         "사람 구해지면 바로 연락드릴게요.",
       );
     }
     return letter(
       `[다원] 사장님, ${dateText(j.date)} 보내드릴 분 안내드려요.`,
-      section("출근", sent.join("\n")),
+      section("출근", sent.join("\n\n")),
       left.length ? section("남은 인원", left.join(" · ")) : "",
       left.length ? "남은 인원도 구해지면 바로 연락드릴게요." : "",
     );
   };
+  // 사람 줄의 '식당에 알림'도 일감 화면의 '식당 문자'와 같은 내용
+  const restMsg = (j) => restJobMsg(j);
   // 대기 부탁 문자
   const standbyMsg = (j, w) => letter(
     `[다원] ${w.name}님, 대기 부탁드려요.`,
