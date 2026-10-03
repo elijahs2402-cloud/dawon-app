@@ -2,7 +2,7 @@
   "use strict";
 
   // 앱 버전(APP_VERSION): 백업 화면에 표시. sw.js의 CACHE 이름과 같이 올림
-  const APP_VERSION = "v26";
+  const APP_VERSION = "v27";
   // 저장소 이름(KEY): 휴대폰 브라우저 안에 자료를 저장할 때 쓰는 이름
   const KEY = "dawon-mobile-v1";
   // 업무 종류(ROLES)
@@ -860,9 +860,10 @@
       <p><strong>아이폰 사파리:</strong> 아래 공유 버튼 → '홈 화면에 추가'</p>
     </details>
     <h2>연습</h2>
-    ${hasData
-      ? `<p class="hint" style="margin:0 4px">연습이 끝나면 아래 '모든 자료 지우기'로 지우고 실제로 쓰시면 돼요.</p>`
-      : `<div class="menu">${menuRow("seed", "play", "연습용 예시 자료 넣기", "가짜 구직자·일감으로 눌러 볼 수 있어요")}</div>`}
+    <div class="menu">
+      ${menuRow("seed", "play", "연습용 예시 자료 넣기", hasData ? "지금 자료는 그대로 두고 구직자 20명·식당 20곳을 더해요" : "가짜 구직자·식당·일감으로 눌러 볼 수 있어요")}
+      ${demoCount().total ? menuRow("clear-demo", "trash", "연습용 자료만 지우기", `구직자 ${demoCount().workers}명 · 식당 ${demoCount().restaurants}곳 · 실제 자료는 그대로`, "warn") : ""}
+    </div>
     <div class="danger-zone"><button class="link-btn" data-act="wipe">모든 자료 지우기</button></div>
     <p class="app-version">앱 버전 ${APP_VERSION}</p>`;
   };
@@ -1686,6 +1687,32 @@
   });
 
   // ---------- 연습용 예시 자료 ----------
+  // 연습용인지 알아보기: demo 표시가 있거나, 예전 버전에서 넣은 예시 이름("(예시)", "예시 ")
+  const isDemoWorker = (w) => Boolean(w.demo || /\(예시\)$/.test(w.name || "") || (w.name || "").startsWith("예시 "));
+  const isDemoRest = (r) => Boolean(r.demo || (r.name || "").startsWith("예시 "));
+  const demoRestIds = () => new Set(state.restaurants.filter(isDemoRest).map((r) => r.id));
+  const isDemoJob = (j, restIds = demoRestIds()) => Boolean(j.demo || restIds.has(j.restaurantId));
+  const demoCount = () => {
+    const ids = demoRestIds();
+    const workers = state.workers.filter(isDemoWorker).length;
+    const restaurants = ids.size;
+    const jobs = state.jobs.filter((j) => isDemoJob(j, ids)).length;
+    return { workers, restaurants, jobs, total: workers + restaurants + jobs };
+  };
+  // 연습용 자료만 지우기: 연습 구직자·식당·일감과 그에 딸린 연락 기록만 지우고 실제 자료는 남김
+  const clearDemo = () => {
+    const restIds = demoRestIds();
+    const jobIds = new Set(state.jobs.filter((j) => isDemoJob(j, restIds)).map((j) => j.id));
+    const workerIds = new Set(state.workers.filter(isDemoWorker).map((w) => w.id));
+    state.assigns = state.assigns.filter((a) => !jobIds.has(a.jobId) && !workerIds.has(a.workerId));
+    state.jobs = state.jobs.filter((j) => !jobIds.has(j.id));
+    workerIds.forEach((id) => removePhoto(id));
+    state.workers = state.workers.filter((w) => !workerIds.has(w.id));
+    // 실제 일감이 걸려 있는 식당은 남겨 둠 (실수로 예시 식당에 실제 일감을 넣은 경우)
+    const used = new Set(state.jobs.map((j) => j.restaurantId));
+    state.restaurants = state.restaurants.filter((r) => !restIds.has(r.id) || used.has(r.id));
+  };
+
   // 연습용 예시 자료: 구직자 20명, 식당 20곳, 지난 기록과 앞으로의 일감 몇 개
   // (이름에 '(예시)'를 붙이고, 전화번호는 쓰지 않는 번호 모양 010-0000-00xx / 02-0000-00xx)
   const seed = () => {
@@ -1702,7 +1729,7 @@
       ["예시 쌈밥집", "구미", "경북 구미시 낙동강변로 889"], ["예시 뷔페", "분당", "경기 성남시 분당구 판교역로 166"],
       ["예시 구내식당", "분당", "경기 성남시 분당구 황새울로 300"], ["예시 돈가스", "분당", "경기 성남시 분당구 정자일로 95"],
     ];
-    const R = RESTS.map(([name, area, address], i) => ({ id: uid(), name, area, phone: `02-0000-00${pad(i + 1)}`, address, addrDetail: i % 3 === 0 ? `${(i % 4) + 1}층` : "", way: "", memo: "" }));
+    const R = RESTS.map(([name, area, address], i) => ({ id: uid(), name, area, phone: `02-0000-00${pad(i + 1)}`, address, addrDetail: i % 3 === 0 ? `${(i % 4) + 1}층` : "", way: "", memo: "", demo: true }));
     const PEOPLE = [
       ["김영희", ["찬모"], "종로"], ["이순자", ["서빙"], "마포"], ["박말순", ["설거지"], "강남"], ["최정숙", ["찬모", "설거지"], "송파"],
       ["정미자", ["서빙", "설거지"], "영등포"], ["강옥순", ["찬모"], "구미"], ["조영자", ["서빙"], "분당"], ["윤복희", ["설거지", "기타"], "종로"],
@@ -1710,10 +1737,10 @@
       ["서명숙", ["서빙", "설거지"], "구미"], ["신옥자", ["찬모"], "분당"], ["권혜숙", ["기타"], "종로"], ["황점순", ["서빙"], "마포"],
       ["안미경", ["찬모", "설거지"], "강남"], ["송순덕", ["설거지"], "송파"], ["전영순", ["서빙", "기타"], "구미"], ["홍정자", ["찬모", "서빙"], "분당"],
     ];
-    const W = PEOPLE.map(([name, roles, area], i) => ({ id: uid(), name: `${name}(예시)`, phone: `010-0000-00${pad(i + 1)}`, roles, area, memo: i % 5 === 0 ? "오전만 가능" : "", joined: today(-30 - i * 3), active: true }));
+    const W = PEOPLE.map(([name, roles, area], i) => ({ id: uid(), name: `${name}(예시)`, phone: `010-0000-00${pad(i + 1)}`, roles, area, memo: i % 5 === 0 ? "오전만 가능" : "", joined: today(-30 - i * 3), active: true, demo: true }));
     const J = [];
     const A = [];
-    const job = (o) => ({ id: uid(), start: "10:00", end: "18:00", breakMin: 60, hourly: 12000, nightHourly: 0, headcount: 1, memo: "", ...o, pay: payBreakdown(o.start || "10:00", o.end || "18:00", o.breakMin ?? 60, o.hourly || 12000, 0).pay });
+    const job = (o) => ({ id: uid(), demo: true, start: "10:00", end: "18:00", breakMin: 60, hourly: 12000, nightHourly: 0, headcount: 1, memo: "", ...o, pay: payBreakdown(o.start || "10:00", o.end || "18:00", o.breakMin ?? 60, o.hourly || 12000, 0).pay });
     // 지난 기록: 사람마다 다른 약속 기록 (출근·직전 취소·안 나옴·식당이 또 찾음)
     const HIST = [
       ["done", "done", "done", "done"], ["done", "late"], ["done", "done", "done"], ["noshow", "done", "noshow"], ["done"],
@@ -1724,7 +1751,7 @@
     W.forEach((w, i) => HIST[i].forEach((o, k) => {
       const j = job({ restaurantId: R[(i + k) % R.length].id, role: w.roles[0], date: today(-(k * 4 + (i % 4) + 2)) });
       J.push(j);
-      A.push({ id: uid(), jobId: j.id, workerId: w.id, status: o === "done" ? "confirmed" : "canceled", outcome: o, fee: o === "done" ? Math.round(j.pay * state.feeRate / 100) : 0, rehire: o === "done" && k === 0 && i % 2 === 0 });
+      A.push({ id: uid(), demo: true, jobId: j.id, workerId: w.id, status: o === "done" ? "confirmed" : "canceled", outcome: o, fee: o === "done" ? Math.round(j.pay * state.feeRate / 100) : 0, rehire: o === "done" && k === 0 && i % 2 === 0 });
     }));
     // 앞으로의 일감: 오늘·내일, 같은 요청(찬모+서빙), 밤 근무, 여러 날 연속
     J.push(job({ restaurantId: R[0].id, role: "찬모", date: today(), memo: "점심·저녁 준비" }));
@@ -1737,7 +1764,7 @@
     // 어제 확정했는데 출근 체크를 안 한 예시
     const y = job({ restaurantId: R[1].id, role: "서빙", date: today(-1), start: "11:00", end: "15:00", breakMin: 0 });
     J.push(y);
-    A.push({ id: uid(), jobId: y.id, workerId: W[1].id, status: "confirmed", outcome: "", fee: 0, rehire: false });
+    A.push({ id: uid(), demo: true, jobId: y.id, workerId: W[1].id, status: "confirmed", outcome: "", fee: 0, rehire: false });
     state.restaurants.push(...R);
     state.workers.push(...W);
     state.jobs.push(...J);
@@ -1837,7 +1864,19 @@
       $("#rate-n").value = Math.round(day * 1.5);
     },
     "save-fee": () => { const n = Number($("#fee-rate").value); if (!(n >= 0 && n <= 100)) { toast("0~100 사이로 적어 주세요"); return; } state.feeRate = n; refresh(); toast("저장했어요"); },
-    "seed": seed,
+    "seed": () => {
+      const hasData = state.workers.length || state.jobs.length;
+      if (hasData && !confirm("지금 자료에 연습용 구직자 20명·식당 20곳이 더해져요.\n연습 자료는 이름에 (예시)가 붙고, 나중에 '연습용 자료만 지우기'로 지울 수 있어요.\n넣을까요?")) return;
+      seed();
+    },
+    "clear-demo": () => {
+      const c = demoCount();
+      if (!c.total) { toast("지울 연습용 자료가 없어요"); return; }
+      if (!confirm(`연습용 자료를 지울까요?\n(구직자 ${c.workers}명, 식당 ${c.restaurants}곳, 일감 ${c.jobs}건)\n실제로 넣은 자료는 그대로 남아요.`)) return;
+      clearDemo();
+      refresh();
+      toast("연습용 자료만 지웠어요");
+    },
     "wipe": () => {
       if (!confirm("정말 모든 자료를 지울까요? 백업 파일이 없으면 되돌릴 수 없어요.")) return;
       if (!confirm("한 번 더 확인할게요. 모두 지울까요?")) return;
