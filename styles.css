@@ -508,8 +508,7 @@ body { overflow-x: hidden; }
 .progress-head span { font-size: .9rem; font-weight: 700; }
 .progress-head .need { color: var(--pri); }
 .progress-head .full { color: var(--ok); }
-.progress { height: 8px; margin: 12px 0 8px; border-radius: 99px; background: var(--fill2); overflow: hidden; }
+.progress { height: 8px; margin: 12px 0 2px; border-radius: 99px; background: var(--fill2); overflow: hidden; }
 .progress span { display: block; height: 100%; border-radius: 99px; background: var(--pri); transition: width .4s var(--ease); }
-.confirmed-card .progress + .person-row { border-top: 0; }
 .row-state { flex: none; align-self: flex-start; margin-top: 2px; color: var(--pri); font-size: 1rem; font-weight: 800; }
 .row-state.ok { color: var(--ok); }

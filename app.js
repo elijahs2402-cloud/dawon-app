@@ -2,7 +2,7 @@
   "use strict";
 
   // 앱 버전(APP_VERSION): 백업 화면에 표시. sw.js의 CACHE 이름과 같이 올림
-  const APP_VERSION = "v32";
+  const APP_VERSION = "v33";
   // 저장소 이름(KEY): 휴대폰 브라우저 안에 자료를 저장할 때 쓰는 이름
   const KEY = "dawon-mobile-v1";
   // 업무 종류(ROLES)
@@ -570,7 +570,7 @@
       <div class="who">${avatar(w)}<div><button class="name-link" data-act="open-worker" data-id="${w.id}">${esc(w.name)}</button>
       <div class="muted small">${esc(dateText(j.date))} · ${esc(restName(j))} ${esc(j.role)}</div></div></div>
       <div class="btn-row">
-        <button class="btn ok" data-act="outcome" data-id="${a.id}" data-v="done">${icon("check")}출근함</button>
+        <button class="btn" data-act="outcome" data-id="${a.id}" data-v="done">${icon("check")}출근함</button>
         <button class="btn warn" data-act="cancel-ask" data-id="${a.id}">${icon("x")}확정 취소</button>
       </div></div>`;
 
@@ -654,7 +654,7 @@
       const msgBtns = `${contactButtons(w, j, confirmMsg(j, w), icon("message") + "확정 문자")}
            ${rest(j.restaurantId)?.phone ? `<a class="btn" href="${smsHref(rest(j.restaurantId).phone, restMsg(j, w))}">${icon("message")}식당에 알림</a>` : `<button class="btn" data-act="copy-rest-msg" data-id="${a.id}">식당 문자 복사</button>`}`;
       // '안 나옴'은 확정 취소 창 안의 이유로 옮김
-      const outcomeBtns = `<button class="btn ok" data-act="outcome" data-id="${a.id}" data-v="done">${icon("check")}출근함</button>`;
+      const outcomeBtns = `<button class="btn" data-act="outcome" data-id="${a.id}" data-v="done">${icon("check")}출근함</button>`;
       const cancelBtn = `<button class="btn warn" data-act="cancel-ask" data-id="${a.id}">${icon("x")}확정 취소</button>`;
       if (j.date < today()) buttons = `${outcomeBtns}${cancelBtn}${w.phone ? `<a class="btn" href="${telHref(w.phone)}">${icon("phone")}전화</a>` : ""}`;
       else if (j.date === today()) buttons = `${msgBtns}${outcomeBtns}${cancelBtn}`;
@@ -733,10 +733,11 @@
     const restList = list.filter((a) => a.status !== "confirmed");
     // 카드 맨 위: "2/3명 확정" + 진행 막대 (토스식)
     const pct = Math.min(100, Math.round((confList.length / (Number(j.headcount) || 1)) * 100));
-    if (confList.length) html += `<h2>확정된 분</h2><div class="card confirmed-card">
+    // 진행 막대 카드와 이름 카드를 따로 나눔
+    if (confList.length) html += `<h2>확정된 분</h2><div class="card progress-card">
       <div class="progress-head"><strong>${confList.length}/${esc(j.headcount)}명 확정</strong><span class="${need ? "need" : "full"}">${need ? `${need}명 더 필요` : "인원 다 찼어요"}</span></div>
-      <div class="progress" role="progressbar" aria-valuenow="${pct}" aria-valuemin="0" aria-valuemax="100"><span style="width:${pct}%"></span></div>
-      ${confList.map((a) => assignRow(a, j)).join("")}</div>`;
+      <div class="progress" role="progressbar" aria-valuenow="${pct}" aria-valuemin="0" aria-valuemax="100"><span style="width:${pct}%"></span></div></div>
+      <div class="card confirmed-card">${confList.map((a) => assignRow(a, j)).join("")}</div>`;
     if (restList.length) html += `<h2>연락한 사람</h2><div class="card">${restList.map((a) => assignRow(a, j)).join("")}</div>`;
 
     html += `<h2>추천 순서 <span class="muted small" style="font-weight:400">약속 잘 지키고 오래 쉰 분 먼저</span></h2>`;
