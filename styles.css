@@ -502,15 +502,14 @@ body { overflow-x: hidden; }
 .rate-x { flex: none; border: 0; border-radius: 10px; background: var(--pri-soft); color: var(--pri); font: inherit; font-size: .78rem; font-weight: 700; padding: 0 8px; cursor: pointer; }
 .rate-card .btn.big { margin-top: 6px; }
 
-/* 확정된 분: 파란 띠 카드 + 꽉 찬 파란 표시 (믿음직 같은 연한 표시와 구분) */
-.card.confirmed-card { background: #eef5ff; }
-.confirmed-card .person-row { border-top-color: #dbe8fb; }
-.confirmed-card .btn:not(.ok):not(.warn):not(.ghost):not(.on) { background: #fff; }
-.confirmed-card .avatar { background: #fff; }
-/* 사진 오른쪽 아래 파란 체크 */
-.who > span.avatar-check { position: relative; flex: none; display: inline-grid; min-width: auto; }
-.check-dot { position: absolute; right: -2px; bottom: -2px; width: 22px; height: 22px; border-radius: 50%; background: var(--pri); color: #fff; display: grid; place-items: center; box-shadow: 0 0 0 2.5px #eef5ff; }
-.check-dot .ic { width: 14px; height: 14px; stroke-width: 3; }
-.pill.confirmed { background: var(--pri); color: #fff; }
-/* 출근함: 꽉 찬 초록 (믿음직 같은 연한 초록 표시와 구분) */
-.pill.done-fill { background: var(--ok); color: #fff; }
+/* 확정된 분 카드 (토스식): 흰 카드 + 맨 위 "2/3명 확정" 진행 막대 + 이름 줄 오른쪽 상태 글자 */
+.progress-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.progress-head strong { font-size: 1.15rem; font-weight: 800; letter-spacing: -0.02em; }
+.progress-head span { font-size: .9rem; font-weight: 700; }
+.progress-head .need { color: var(--pri); }
+.progress-head .full { color: var(--ok); }
+.progress { height: 8px; margin: 12px 0 8px; border-radius: 99px; background: var(--fill2); overflow: hidden; }
+.progress span { display: block; height: 100%; border-radius: 99px; background: var(--pri); transition: width .4s var(--ease); }
+.confirmed-card .progress + .person-row { border-top: 0; }
+.row-state { flex: none; align-self: flex-start; margin-top: 2px; color: var(--pri); font-size: 1rem; font-weight: 800; }
+.row-state.ok { color: var(--ok); }

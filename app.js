@@ -2,7 +2,7 @@
   "use strict";
 
   // 앱 버전(APP_VERSION): 백업 화면에 표시. sw.js의 CACHE 이름과 같이 올림
-  const APP_VERSION = "v31";
+  const APP_VERSION = "v32";
   // 저장소 이름(KEY): 휴대폰 브라우저 안에 자료를 저장할 때 쓰는 이름
   const KEY = "dawon-mobile-v1";
   // 업무 종류(ROLES)
@@ -642,13 +642,14 @@
     const head = `<div class="name-line"><button class="name-link" data-act="open-worker" data-id="${w.id}">${esc(w.name)}</button>${badge(trustOf(s))}</div>`;
     let state_ = "";
     let buttons = "";
+    let side = ""; // 이름 줄 오른쪽 상태 글자 (토스식: 확정=파랑, 출근함=초록)
     if (a.status === "confirmed" && a.outcome === "done") {
-      state_ = `<span class="pill done-fill">${icon("check")}출근함</span> <span class="muted small">수수료 ${won(a.fee)}</span>`;
+      side = `<strong class="row-state ok">출근함</strong>`;
+      state_ = `<span class="muted small">수수료 ${won(a.fee)}</span>`;
       buttons = `<button class="btn ${a.rehire ? "on" : ""}" data-act="toggle-rehire" data-id="${a.id}">${a.rehire ? icon("heart", "fill") + "식당이 또 찾음" : icon("heart") + "식당이 또 찾나요?"}</button>
         <button class="btn ghost" data-act="undo-assign" data-id="${a.id}">출근 취소</button>`;
     } else if (a.status === "confirmed") {
-      // 확정 표시는 연한 파랑 카드 + 사진 위 체크로 대신함 (글자 표시 없음)
-      state_ = "";
+      side = `<strong class="row-state">확정</strong>`;
       // 문자 버튼: 오늘·앞으로의 일 / 출근 체크 버튼: 오늘·지난 일 (오늘은 둘 다)
       const msgBtns = `${contactButtons(w, j, confirmMsg(j, w), icon("message") + "확정 문자")}
            ${rest(j.restaurantId)?.phone ? `<a class="btn" href="${smsHref(rest(j.restaurantId).phone, restMsg(j, w))}">${icon("message")}식당에 알림</a>` : `<button class="btn" data-act="copy-rest-msg" data-id="${a.id}">식당 문자 복사</button>`}`;
@@ -673,9 +674,7 @@
       state_ = `<span class="pill gray">${outcomeText[a.outcome] || "취소"}</span>`;
       buttons = `<button class="btn ghost" data-act="undo-assign" data-id="${a.id}">되돌리기</button>`;
     }
-    // 확정된 분은 사진 오른쪽 아래에 파란 체크
-    const pic = a.status === "confirmed" ? `<span class="avatar-check">${avatar(w)}<span class="check-dot">${icon("check")}</span></span>` : avatar(w);
-    return `<div class="person-row ${a.status === "canceled" ? "dim" : ""}"><div class="who">${pic}<div>${head}${state_ ? `<div class="status-line">${state_}</div>` : ""}</div></div><div class="btn-row">${buttons}</div></div>`;
+    return `<div class="person-row ${a.status === "canceled" ? "dim" : ""}"><div class="who">${avatar(w)}<div>${head}${state_ ? `<div class="status-line">${state_}</div>` : ""}</div>${side}</div><div class="btn-row">${buttons}</div></div>`;
   };
 
   const candidateRow = (c, j, full) => {
@@ -732,7 +731,12 @@
     // 확정된 분은 따로 묶어 파란 띠 카드로 맨 위에, 나머지(대기·연락함·취소)는 그 아래
     const confList = list.filter((a) => a.status === "confirmed");
     const restList = list.filter((a) => a.status !== "confirmed");
-    if (confList.length) html += `<h2>확정된 분 <span class="count">${confList.length}/${esc(j.headcount)}명</span></h2><div class="card confirmed-card">${confList.map((a) => assignRow(a, j)).join("")}</div>`;
+    // 카드 맨 위: "2/3명 확정" + 진행 막대 (토스식)
+    const pct = Math.min(100, Math.round((confList.length / (Number(j.headcount) || 1)) * 100));
+    if (confList.length) html += `<h2>확정된 분</h2><div class="card confirmed-card">
+      <div class="progress-head"><strong>${confList.length}/${esc(j.headcount)}명 확정</strong><span class="${need ? "need" : "full"}">${need ? `${need}명 더 필요` : "인원 다 찼어요"}</span></div>
+      <div class="progress" role="progressbar" aria-valuenow="${pct}" aria-valuemin="0" aria-valuemax="100"><span style="width:${pct}%"></span></div>
+      ${confList.map((a) => assignRow(a, j)).join("")}</div>`;
     if (restList.length) html += `<h2>연락한 사람</h2><div class="card">${restList.map((a) => assignRow(a, j)).join("")}</div>`;
 
     html += `<h2>추천 순서 <span class="muted small" style="font-weight:400">약속 잘 지키고 오래 쉰 분 먼저</span></h2>`;
