@@ -2,7 +2,7 @@
   "use strict";
 
   // 앱 버전(APP_VERSION): 백업 화면에 표시. sw.js의 CACHE 이름과 같이 올림
-  const APP_VERSION = "v19";
+  const APP_VERSION = "v20";
   // 저장소 이름(KEY): 휴대폰 브라우저 안에 자료를 저장할 때 쓰는 이름
   const KEY = "dawon-mobile-v1";
   // 업무 종류(ROLES)
@@ -115,14 +115,28 @@
   const daysBetween = (a, b) => Math.round((new Date(b) - new Date(a)) / 86400000);
 
   // ---------- 기본 문자 문구 ----------
+  // 이모티콘 없이, 문단 사이는 한 줄 띄움
   const defaultScripts = () => [
-    { id: "s1", title: "밤늦게 온 연락 답장", kind: "sms", text: "늦은 시간까지 연락 주셔서 고마워요 😊 지금은 바로 통화가 어려워서요, 내일 아침 7시에 제가 먼저 전화드릴게요. 급한 일이면 한 번 더 걸어주세요~" },
-    { id: "s2", title: "일 언제 주냐는 연락", kind: "sms", text: "연락 주셔서 고마워요~ 요즘 약속 잘 지켜주시는 분들께 먼저 연락드리고 있어요. 자리 나면 꼭 챙겨드릴게요 😊" },
-    { id: "s3", title: "술 드시고 온 전화 (말로 할 때)", kind: "talk", text: "오늘은 늦었으니까 내일 맑은 정신으로 얘기해요. 제가 내일 꼭 전화드릴게요. 푹 쉬세요~" },
-    { id: "s4", title: "직전 취소 연락 받았을 때", kind: "sms", text: "알려주셔서 고마워요. 다음부터는 하루 전까지만 알려주시면 식당에 미리 말씀드릴 수 있어요. 몸 잘 챙기세요 🙏" },
-    { id: "s5", title: "대기 부탁", kind: "sms", text: "혹시 내일 빈자리가 생기면 바로 나가실 수 있을까요? 대기해 주시면 다음 일 먼저 챙겨드릴게요 😊" },
-    { id: "s6", title: "처음 가입한 분 안내", kind: "sms", text: "[다원] 가입해 주셔서 고마워요 😊 일은 약속 잘 지켜주시는 분들께 먼저 연락드려요. 못 가시게 되면 꼭 하루 전까지 알려주세요. 밤에는 문자 남겨주시면 아침에 연락드릴게요~" },
+    { id: "s1", title: "밤늦게 온 연락 답장", kind: "sms", text: "늦은 시간까지 연락 주셔서 고마워요.\n\n지금은 바로 통화가 어려워서요, 내일 아침 7시에 제가 먼저 전화드릴게요.\n\n급한 일이면 한 번 더 걸어주세요." },
+    { id: "s2", title: "일 언제 주냐는 연락", kind: "sms", text: "연락 주셔서 고마워요.\n\n요즘 약속 잘 지켜주시는 분들께 먼저 연락드리고 있어요.\n자리 나면 꼭 챙겨드릴게요." },
+    { id: "s3", title: "술 드시고 온 전화 (말로 할 때)", kind: "talk", text: "오늘은 늦었으니까 내일 맑은 정신으로 얘기해요. 제가 내일 꼭 전화드릴게요. 푹 쉬세요." },
+    { id: "s4", title: "직전 취소 연락 받았을 때", kind: "sms", text: "알려주셔서 고마워요.\n\n다음부터는 하루 전까지만 알려주시면 식당에 미리 말씀드릴 수 있어요.\n\n몸 잘 챙기세요." },
+    { id: "s5", title: "대기 부탁", kind: "sms", text: "혹시 내일 빈자리가 생기면 바로 나가실 수 있을까요?\n\n대기해 주시면 다음 일 먼저 챙겨드릴게요." },
+    { id: "s6", title: "처음 가입한 분 안내", kind: "sms", text: "[다원] 가입해 주셔서 고마워요.\n\n[일 순서]\n약속 잘 지켜주시는 분들께 먼저 연락드려요.\n\n[취소할 때]\n못 가시게 되면 꼭 하루 전까지 알려주세요.\n\n[밤에 연락할 때]\n문자 남겨주시면 아침에 연락드릴게요." },
   ];
+  // 예전(이모티콘 있던) 기본 문구: 엄마가 고치지 않고 그대로 쓰는 문구만 새 문구로 바꿔 줌
+  const OLD_SCRIPT_TEXT = {
+    s1: "늦은 시간까지 연락 주셔서 고마워요 😊 지금은 바로 통화가 어려워서요, 내일 아침 7시에 제가 먼저 전화드릴게요. 급한 일이면 한 번 더 걸어주세요~",
+    s2: "연락 주셔서 고마워요~ 요즘 약속 잘 지켜주시는 분들께 먼저 연락드리고 있어요. 자리 나면 꼭 챙겨드릴게요 😊",
+    s3: "오늘은 늦었으니까 내일 맑은 정신으로 얘기해요. 제가 내일 꼭 전화드릴게요. 푹 쉬세요~",
+    s4: "알려주셔서 고마워요. 다음부터는 하루 전까지만 알려주시면 식당에 미리 말씀드릴 수 있어요. 몸 잘 챙기세요 🙏",
+    s5: "혹시 내일 빈자리가 생기면 바로 나가실 수 있을까요? 대기해 주시면 다음 일 먼저 챙겨드릴게요 😊",
+    s6: "[다원] 가입해 주셔서 고마워요 😊 일은 약속 잘 지켜주시는 분들께 먼저 연락드려요. 못 가시게 되면 꼭 하루 전까지 알려주세요. 밤에는 문자 남겨주시면 아침에 연락드릴게요~",
+  };
+  const refreshOldScripts = (scripts) => {
+    const fresh = Object.fromEntries(defaultScripts().map((x) => [x.id, x.text]));
+    return (scripts || []).map((x) => (OLD_SCRIPT_TEXT[x.id] && x.text === OLD_SCRIPT_TEXT[x.id] ? { ...x, text: fresh[x.id] } : x));
+  };
 
   // ---------- 자료 저장/불러오기 ----------
   const blank = () => ({ version: 1, restaurants: [], workers: [], jobs: [], assigns: [], scripts: defaultScripts(), feeRate: 10, rate: { day: 12000, night: 0 }, lastBackup: "" });
@@ -130,7 +144,7 @@
   const load = () => {
     try {
       const saved = JSON.parse(localStorage.getItem(KEY));
-      if (isValidData(saved)) return { ...blank(), ...saved };
+      if (isValidData(saved)) { const st = { ...blank(), ...saved }; st.scripts = refreshOldScripts(st.scripts); return st; }
     } catch (_) {}
     return blank();
   };
@@ -343,51 +357,86 @@
   };
 
   // ---------- 문자 내용 ----------
-  const offerMsg = (j, w) => { const r = rest(j.restaurantId); return `[다원] ${w.name}님~ ${dateText(j.date)} ${j.start}~${j.end} ${r?.name || ""}${r?.area ? `(${r.area})` : ""} ${j.role} 일 있어요. ${payText(j)}.${groupOf(j).length > 1 ? ` (${groupRange(j)} ${groupOf(j).length}일 연속)` : ""} 가능하시면 연락 주세요 😊`; };
+  // ---------- 보내는 문자 ----------
+  // 문자 모양: 이모티콘 없이 [제목] 아래에 내용, 문단 사이는 한 줄 띄움
+  const section = (title, ...lines) => {
+    const body = lines.filter(Boolean);
+    return body.length ? `[${title}]\n${body.join("\n")}` : "";
+  };
+  const letter = (...blocks) => blocks.filter(Boolean).join("\n\n");
+  const shortDate = (d) => dateText(d).replace(/^(오늘|내일|어제) /, "");
+  const timeLine = (j) => `${j.start}~${j.end}${j.breakMin ? ` (휴게 ${hoursText(Number(j.breakMin))})` : ""}`;
+
+  // 일 제안 문자
+  const offerMsg = (j, w) => {
+    const r = rest(j.restaurantId);
+    const g = groupOf(j);
+    return letter(
+      `[다원] ${w.name}님, 일자리 안내드려요.`,
+      section("근무", `${dateText(j.date)} ${timeLine(j)}`, `${r?.name || ""}${r?.area ? `(${r.area})` : ""} ${j.role}`),
+      g.length > 1 ? section("기간", `${groupRange(j)} ${g.length}일 연속`) : "",
+      section("급여", payText(j)),
+      "가능하시면 연락 주세요.",
+    );
+  };
   // mapUrl: 네이버 지도 검색 주소 (주소가 없으면 식당 이름+지역으로 찾음). 누르면 지도 앱이나 지도 웹이 열림
   const mapUrl = (r) => {
     const q = (r?.address ? r.address.replace(/\s*\([^)]*\)\s*$/, "") : `${r?.name || ""} ${r?.area || ""}`).trim();
     return q ? `https://map.naver.com/p/search/${encodeURIComponent(q)}` : "";
   };
-  // 확정 문자: 날짜·시간, 주소, 오시는 길, 지도 링크, 식당 전화를 한 줄씩
+  // 확정 문자: 근무·급여·주소·오시는 길·식당 전화를 문단별로
   const confirmMsg = (j, w) => {
     const r = rest(j.restaurantId);
     // 주소: 휴대폰이 알아보기 쉽게 괄호 속 동 이름을 빼고, 상세 주소는 다음 줄로 (누르면 지도가 열리도록)
     const road = (r?.address || "").replace(/\s*\([^)]*\)\s*$/, "");
-    return [
+    // 여러 날 연속으로 확정됐으면 근무일을 모두 적음
+    const days = groupOf(j).filter((x) => state.assigns.some((a) => a.jobId === x.id && a.workerId === w.id && a.status === "confirmed"));
+    return letter(
       `[다원] ${w.name}님 확정됐어요!`,
-      `${dateText(j.date)} ${j.start}까지 ${r?.name || ""} 가시면 돼요.`,
-      // 여러 날 연속으로 확정됐으면 근무일을 모두 적음
-      (() => {
-        const days = groupOf(j).filter((x) => state.assigns.some((a) => a.jobId === x.id && a.workerId === w.id && a.status === "confirmed"));
-        return days.length > 1 ? `📅 근무일: ${days.map((x) => dateText(x.date).replace(/^(오늘|내일|어제) /, "")).join(", ")} (${days.length}일)` : "";
-      })(),
-      `⏰ ${j.start}~${j.end}${j.breakMin ? ` (휴게 ${hoursText(Number(j.breakMin))})` : ""} · ${payText(j)}`,
-      road ? `📍 주소: ${road}${r.addrDetail ? `
-　　 ${r.addrDetail}` : ""}` : "",
-      r?.way ? `🚶 오시는 길: ${r.way}` : "",
-      r?.phone ? `☎ 식당 전화: ${r.phone}` : "",
-      "혹시 못 가시게 되면 꼭 미리 알려주세요 🙏",
-    ].filter(Boolean).join("\n");
+      section("근무", `${dateText(j.date)} ${timeLine(j)}`, `${r?.name || ""} ${j.role}`, `${j.start}까지 가시면 돼요.`),
+      days.length > 1 ? section("근무일", `${days.map((x) => shortDate(x.date)).join(", ")} (${days.length}일)`) : "",
+      section("급여", payText(j)),
+      road ? section("주소", road, r.addrDetail) : "",
+      r?.way ? section("오시는 길", r.way) : "",
+      r?.phone ? section("식당 전화", normPhone(r.phone)) : "",
+      "혹시 못 가시게 되면 꼭 미리 알려주세요.",
+    );
   };
-  const restMsg = (j, w) => `[다원] 사장님, ${dateText(j.date)} ${j.role} ${w.name}님 보내드려요. ${j.start} 출근입니다.${w.phone ? ` 연락처: ${w.phone}` : ""}`;
-  // 식당에 보내는 문자: 확정된 사람 수에 따라 내용이 달라짐
+  // 식당에 한 사람 알림
+  const restMsg = (j, w) => letter(
+    `[다원] 사장님, ${dateText(j.date)} 보내드릴 분 안내드려요.`,
+    section("출근", `${j.role} ${w.name}님 ${j.start}`),
+    w.phone ? section("연락처", normPhone(w.phone)) : "",
+  );
+  // 식당에 보내는 문자: 같은 요청의 업무를 모아 한 통으로 (확정된 사람·남은 인원)
   const restJobMsg = (j) => {
     const jobs = reqOf(j);
-    const head = `[다원] 사장님, ${dateText(j.date)}`;
-    const sameStart = jobs.every((x) => x.start === jobs[0].start);
     const sent = [];
     const left = [];
     jobs.forEach((x) => {
-      const names = confirmedOf(x).map((a) => worker(a.workerId)?.name).filter(Boolean);
-      names.forEach((n) => sent.push(`${x.role} ${n}님${sameStart ? "" : `(${x.start})`}`));
+      confirmedOf(x).map((a) => worker(a.workerId)?.name).filter(Boolean).forEach((n) => sent.push(`${x.role} ${n}님 ${x.start}`));
       if (jobNeed(x)) left.push(`${x.role} ${jobNeed(x)}명`);
     });
-    if (!sent.length) return `${head} ${jobs.map((x) => `${x.role} ${x.headcount}명`).join("·")} 요청 잘 받았어요. 사람 구해지면 바로 연락드릴게요 😊`;
-    const startText = sameStart ? ` ${jobs[0].start} 출근입니다.` : "";
-    return `${head} ${sent.join(", ")} ${left.length ? "먼저 " : ""}보내드려요.${startText}${left.length ? ` 나머지 ${left.join("·")}도 구해지면 바로 연락드릴게요.` : ""}`;
+    if (!sent.length) {
+      return letter(
+        `[다원] 사장님, ${dateText(j.date)} 요청 잘 받았어요.`,
+        section("요청", jobs.map((x) => `${x.role} ${x.headcount}명 ${x.start}~${x.end}`).join("\n")),
+        "사람 구해지면 바로 연락드릴게요.",
+      );
+    }
+    return letter(
+      `[다원] 사장님, ${dateText(j.date)} 보내드릴 분 안내드려요.`,
+      section("출근", sent.join("\n")),
+      left.length ? section("남은 인원", left.join(" · ")) : "",
+      left.length ? "남은 인원도 구해지면 바로 연락드릴게요." : "",
+    );
   };
-  const standbyMsg = (j, w) => `[다원] ${w.name}님, ${dateText(j.date)} ${restName(j)} ${j.role} 대기 부탁드려요. 빈자리 생기면 바로 연락드릴게요. 대기해 주시면 다음 일 먼저 챙겨드려요 😊`;
+  // 대기 부탁 문자
+  const standbyMsg = (j, w) => letter(
+    `[다원] ${w.name}님, 대기 부탁드려요.`,
+    section("근무", `${dateText(j.date)} ${timeLine(j)}`, `${restName(j)} ${j.role}`),
+    "빈자리가 생기면 바로 연락드릴게요.\n대기해 주시면 다음 일 먼저 챙겨드려요.",
+  );
 
   // ---------- 알림(토스트) ----------
   let toastTimer;
