@@ -2,7 +2,7 @@
   "use strict";
 
   // 앱 버전(APP_VERSION): 백업 화면에 표시. sw.js의 CACHE 이름과 같이 올림
-  const APP_VERSION = "v28";
+  const APP_VERSION = "v29";
   // 저장소 이름(KEY): 휴대폰 브라우저 안에 자료를 저장할 때 쓰는 이름
   const KEY = "dawon-mobile-v1";
   // 업무 종류(ROLES)
@@ -629,7 +629,7 @@
 
   // ---------- 화면: 일감 하나 ----------
   const statusText = { asked: "연락함", standby: "대기 중", confirmed: "확정", canceled: "취소" };
-  const outcomeText = { done: icon("check") + "출근함", late: icon("alert") + "직전 취소", noshow: icon("x") + "안 나옴", cancel_ok: "미리 알리고 취소" };
+  const outcomeText = { done: icon("check") + "출근함", late: icon("alert") + "직전 취소", noshow: icon("x") + "안 나옴", cancel_ok: "미리 알리고 취소", rest_cancel: "식당 사정 취소" };
 
   const contactButtons = (w, j, msg, msgLabel = icon("message") + "문자") => w.phone
     ? `<a class="btn" href="${telHref(w.phone)}" data-act="contacted" data-worker="${w.id}" data-job="${j.id}">${icon("phone")}전화</a>
@@ -644,7 +644,7 @@
     let state_ = "";
     let buttons = "";
     if (a.status === "confirmed" && a.outcome === "done") {
-      state_ = `<span class="pill ok">${icon("check")}출근함</span> <span class="muted small">수수료 ${won(a.fee)}</span>`;
+      state_ = `<span class="pill done-fill">${icon("check")}출근함</span> <span class="muted small">수수료 ${won(a.fee)}</span>`;
       buttons = `<button class="btn ${a.rehire ? "on" : ""}" data-act="toggle-rehire" data-id="${a.id}">${a.rehire ? icon("heart", "fill") + "식당이 또 찾음" : icon("heart") + "식당이 또 찾나요?"}</button>
         <button class="btn ghost" data-act="undo-assign" data-id="${a.id}">되돌리기</button>`;
     } else if (a.status === "confirmed") {
@@ -654,7 +654,7 @@
            ${rest(j.restaurantId)?.phone ? `<a class="btn" href="${smsHref(rest(j.restaurantId).phone, restMsg(j, w))}">${icon("message")}식당에 알림</a>` : `<button class="btn" data-act="copy-rest-msg" data-id="${a.id}">식당 문자 복사</button>`}`;
       const outcomeBtns = `<button class="btn ok" data-act="outcome" data-id="${a.id}" data-v="done">${icon("check")}출근함</button>
            <button class="btn bad" data-act="outcome" data-id="${a.id}" data-v="noshow">${icon("x")}안 나옴</button>`;
-      const cancelBtn = `<button class="btn warn" data-act="cancel-ask" data-id="${a.id}">${icon("alert")}취소 연락옴</button>`;
+      const cancelBtn = `<button class="btn warn" data-act="cancel-ask" data-id="${a.id}">${icon("x")}확정 취소</button>`;
       if (j.date < today()) buttons = `${outcomeBtns}${cancelBtn}${w.phone ? `<a class="btn" href="${telHref(w.phone)}">${icon("phone")}전화</a>` : ""}`;
       else if (j.date === today()) buttons = `${msgBtns}${outcomeBtns}${cancelBtn}`;
       else buttons = `${msgBtns}${cancelBtn}`;
@@ -1518,14 +1518,24 @@
   const cancelAsk = (a) => {
     const w = worker(a.workerId);
     openSheet({
-      title: `${w?.name || ""}님 취소`,
-      body: `<p>언제 알려왔나요?</p><div class="choice-list">
-        <label class="choice"><input type="radio" name="kind" value="cancel_ok" required /><span><strong>미리 알려줬어요</strong><small>하루 전 이상 · 기록에 불이익 없음</small></span></label>
-        <label class="choice"><input type="radio" name="kind" value="late" /><span><strong>직전에 취소했어요</strong><small>약속 기록에 '직전 취소'로 남아요</small></span></label></div>`,
-      submit: "취소로 기록",
+      title: `${w?.name || ""}님 확정 취소`,
+      body: `<p>왜 취소하나요?</p><div class="choice-list">
+        <label class="choice"><input type="radio" name="kind" value="mistake" required /><span><strong>잘못 눌렀어요</strong><small>'대기 중'으로 되돌려요 · 기록에 안 남아요</small></span></label>
+        <label class="choice"><input type="radio" name="kind" value="rest_cancel" /><span><strong>식당 사정으로 취소</strong><small>구직자 기록에 불이익 없음</small></span></label>
+        <label class="choice"><input type="radio" name="kind" value="cancel_ok" /><span><strong>본인이 미리 알려줬어요</strong><small>하루 전 이상 · 기록에 불이익 없음</small></span></label>
+        <label class="choice"><input type="radio" name="kind" value="late" /><span><strong>본인이 직전에 취소했어요</strong><small>약속 기록에 '직전 취소'로 남아요</small></span></label></div>`,
+      submit: "확정 취소",
       onSubmit: (fd) => {
-        setOutcome(a, val(fd, "kind"));
+        const kind = val(fd, "kind");
         const j = job(a.jobId);
+        // 잘못 누른 경우: 취소 기록 없이 '대기 중'으로만 되돌림
+        if (kind === "mistake") {
+          a.status = "standby"; a.outcome = ""; a.fee = 0; a.rehire = false; save();
+          if (route.name !== "job") go({ name: "job", id: j.id }); else refresh();
+          toast("대기 중으로 되돌렸어요");
+          return;
+        }
+        setOutcome(a, kind);
         const sb = assignsOf(j.id).find((x) => x.status === "standby");
         if (route.name !== "job") go({ name: "job", id: j.id }); else refresh();
         toast(sb ? `대기 중인 ${worker(sb.workerId)?.name}님을 확정해 보세요` : "취소로 기록했어요. 다른 분을 찾아보세요.");

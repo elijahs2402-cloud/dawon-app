@@ -505,3 +505,5 @@ body { overflow-x: hidden; }
 /* 확정된 분: 파란 띠 카드 + 꽉 찬 파란 표시 (믿음직 같은 연한 표시와 구분) */
 .card.confirmed-card { box-shadow: inset 4px 0 0 var(--pri); }
 .pill.confirmed { background: var(--pri); color: #fff; }
+/* 출근함: 꽉 찬 초록 (믿음직 같은 연한 초록 표시와 구분) */
+.pill.done-fill { background: var(--ok); color: #fff; }
