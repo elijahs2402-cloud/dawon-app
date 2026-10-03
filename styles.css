@@ -501,3 +501,7 @@ body { overflow-x: hidden; }
 .rate-night { display: flex; gap: 4px; min-width: 0; }
 .rate-x { flex: none; border: 0; border-radius: 10px; background: var(--pri-soft); color: var(--pri); font: inherit; font-size: .78rem; font-weight: 700; padding: 0 8px; cursor: pointer; }
 .rate-card .btn.big { margin-top: 6px; }
+
+/* 확정된 분: 파란 띠 카드 + 꽉 찬 파란 표시 (믿음직 같은 연한 표시와 구분) */
+.card.confirmed-card { box-shadow: inset 4px 0 0 var(--pri); }
+.pill.confirmed { background: var(--pri); color: #fff; }

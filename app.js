@@ -2,7 +2,7 @@
   "use strict";
 
   // 앱 버전(APP_VERSION): 백업 화면에 표시. sw.js의 CACHE 이름과 같이 올림
-  const APP_VERSION = "v27";
+  const APP_VERSION = "v28";
   // 저장소 이름(KEY): 휴대폰 브라우저 안에 자료를 저장할 때 쓰는 이름
   const KEY = "dawon-mobile-v1";
   // 업무 종류(ROLES)
@@ -648,7 +648,7 @@
       buttons = `<button class="btn ${a.rehire ? "on" : ""}" data-act="toggle-rehire" data-id="${a.id}">${a.rehire ? icon("heart", "fill") + "식당이 또 찾음" : icon("heart") + "식당이 또 찾나요?"}</button>
         <button class="btn ghost" data-act="undo-assign" data-id="${a.id}">되돌리기</button>`;
     } else if (a.status === "confirmed") {
-      state_ = `<span class="pill ok">확정</span>`;
+      state_ = `<span class="pill confirmed">${icon("check")}확정</span>`;
       // 문자 버튼: 오늘·앞으로의 일 / 출근 체크 버튼: 오늘·지난 일 (오늘은 둘 다)
       const msgBtns = `${contactButtons(w, j, confirmMsg(j, w), icon("message") + "확정 문자")}
            ${rest(j.restaurantId)?.phone ? `<a class="btn" href="${smsHref(rest(j.restaurantId).phone, restMsg(j, w))}">${icon("message")}식당에 알림</a>` : `<button class="btn" data-act="copy-rest-msg" data-id="${a.id}">식당 문자 복사</button>`}`;
@@ -727,7 +727,11 @@
     else if (need) html += `<div class="banner need">${need}명 더 필요해요</div>`;
     else html += `<div class="banner ok">${icon("check")}인원이 다 찼어요</div>`;
 
-    if (list.length) html += `<h2>연락한 사람</h2><div class="card">${list.map((a) => assignRow(a, j)).join("")}</div>`;
+    // 확정된 분은 따로 묶어 파란 띠 카드로 맨 위에, 나머지(대기·연락함·취소)는 그 아래
+    const confList = list.filter((a) => a.status === "confirmed");
+    const restList = list.filter((a) => a.status !== "confirmed");
+    if (confList.length) html += `<h2>확정된 분 <span class="count">${confList.length}/${esc(j.headcount)}명</span></h2><div class="card confirmed-card">${confList.map((a) => assignRow(a, j)).join("")}</div>`;
+    if (restList.length) html += `<h2>연락한 사람</h2><div class="card">${restList.map((a) => assignRow(a, j)).join("")}</div>`;
 
     html += `<h2>추천 순서 <span class="muted small" style="font-weight:400">약속 잘 지키고 오래 쉰 분 먼저</span></h2>`;
     if (!cands.length) {
