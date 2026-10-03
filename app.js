@@ -2,7 +2,7 @@
   "use strict";
 
   // 앱 버전(APP_VERSION): 백업 화면에 표시. sw.js의 CACHE 이름과 같이 올림
-  const APP_VERSION = "v25";
+  const APP_VERSION = "v26";
   // 저장소 이름(KEY): 휴대폰 브라우저 안에 자료를 저장할 때 쓰는 이름
   const KEY = "dawon-mobile-v1";
   // 업무 종류(ROLES)
@@ -1686,38 +1686,64 @@
   });
 
   // ---------- 연습용 예시 자료 ----------
+  // 연습용 예시 자료: 구직자 20명, 식당 20곳, 지난 기록과 앞으로의 일감 몇 개
+  // (이름에 '(예시)'를 붙이고, 전화번호는 쓰지 않는 번호 모양 010-0000-00xx / 02-0000-00xx)
   const seed = () => {
-    const R = [
-      { id: uid(), name: "예시 한식당", area: "종로", phone: "", address: "예시 주소 1", memo: "" },
-      { id: uid(), name: "예시 국밥집", area: "마포", phone: "", address: "예시 주소 2", memo: "" },
-      { id: uid(), name: "예시 고깃집", area: "종로", phone: "", address: "", memo: "" },
+    const pad = (n) => String(n).padStart(2, "0");
+    const RESTS = [
+      ["예시 한식당", "종로", "서울 종로구 종로 1"], ["예시 국밥집", "마포", "서울 마포구 양화로 45"],
+      ["예시 고깃집", "강남", "서울 강남구 테헤란로 10"], ["예시 분식집", "종로", "서울 종로구 삼일대로 300"],
+      ["예시 칼국수", "마포", "서울 마포구 월드컵로 20"], ["예시 백반집", "강남", "서울 강남구 강남대로 400"],
+      ["예시 횟집", "송파", "서울 송파구 올림픽로 50"], ["예시 중식당", "송파", "서울 송파구 송파대로 100"],
+      ["예시 일식당", "강남", "서울 강남구 논현로 80"], ["예시 감자탕", "영등포", "서울 영등포구 여의대로 10"],
+      ["예시 순대국", "영등포", "서울 영등포구 영중로 30"], ["예시 냉면집", "종로", "서울 종로구 율곡로 50"],
+      ["예시 닭갈비", "마포", "서울 마포구 와우산로 30"], ["예시 보쌈집", "송파", "서울 송파구 백제고분로 70"],
+      ["예시 해장국", "구미", "경북 구미시 송정대로 55"], ["예시 삼계탕", "구미", "경북 구미시 신비로 19"],
+      ["예시 쌈밥집", "구미", "경북 구미시 낙동강변로 889"], ["예시 뷔페", "분당", "경기 성남시 분당구 판교역로 166"],
+      ["예시 구내식당", "분당", "경기 성남시 분당구 황새울로 300"], ["예시 돈가스", "분당", "경기 성남시 분당구 정자일로 95"],
     ];
-    const names = ["예시 김", "예시 이", "예시 박", "예시 최", "예시 정", "예시 강"];
-    const roleSets = [["찬모", "설거지"], ["서빙"], ["서빙", "설거지"], ["찬모"], ["찬모", "서빙"], ["설거지"]];
-    const areas = ["종로", "마포", "종로", "마포", "종로", "마포"];
-    const W = names.map((n, i) => ({ id: uid(), name: n, phone: "", roles: roleSets[i], area: areas[i], memo: "", joined: today(-60), active: true }));
+    const R = RESTS.map(([name, area, address], i) => ({ id: uid(), name, area, phone: `02-0000-00${pad(i + 1)}`, address, addrDetail: i % 3 === 0 ? `${(i % 4) + 1}층` : "", way: "", memo: "" }));
+    const PEOPLE = [
+      ["김영희", ["찬모"], "종로"], ["이순자", ["서빙"], "마포"], ["박말순", ["설거지"], "강남"], ["최정숙", ["찬모", "설거지"], "송파"],
+      ["정미자", ["서빙", "설거지"], "영등포"], ["강옥순", ["찬모"], "구미"], ["조영자", ["서빙"], "분당"], ["윤복희", ["설거지", "기타"], "종로"],
+      ["장경자", ["찬모", "서빙"], "마포"], ["임순이", ["서빙"], "강남"], ["한정희", ["찬모"], "송파"], ["오금순", ["설거지"], "영등포"],
+      ["서명숙", ["서빙", "설거지"], "구미"], ["신옥자", ["찬모"], "분당"], ["권혜숙", ["기타"], "종로"], ["황점순", ["서빙"], "마포"],
+      ["안미경", ["찬모", "설거지"], "강남"], ["송순덕", ["설거지"], "송파"], ["전영순", ["서빙", "기타"], "구미"], ["홍정자", ["찬모", "서빙"], "분당"],
+    ];
+    const W = PEOPLE.map(([name, roles, area], i) => ({ id: uid(), name: `${name}(예시)`, phone: `010-0000-00${pad(i + 1)}`, roles, area, memo: i % 5 === 0 ? "오전만 가능" : "", joined: today(-30 - i * 3), active: true }));
     const J = [];
     const A = [];
-    // 지난 기록: 사람마다 다른 약속 기록이 생기도록
-    const history = [["done", "done", "done", "done"], ["done", "late"], ["done", "done", "done"], ["noshow", "done", "noshow"], ["done"], []];
-    W.forEach((w, i) => history[i].forEach((o, k) => {
-      const j = { id: uid(), restaurantId: R[(i + k) % 3].id, role: w.roles[0], date: today(-(k * 3 + i + 2)), start: "10:00", end: "18:00", pay: 120000, headcount: 1, memo: "" };
+    const job = (o) => ({ id: uid(), start: "10:00", end: "18:00", breakMin: 60, hourly: 12000, nightHourly: 0, headcount: 1, memo: "", ...o, pay: payBreakdown(o.start || "10:00", o.end || "18:00", o.breakMin ?? 60, o.hourly || 12000, 0).pay });
+    // 지난 기록: 사람마다 다른 약속 기록 (출근·직전 취소·안 나옴·식당이 또 찾음)
+    const HIST = [
+      ["done", "done", "done", "done"], ["done", "late"], ["done", "done", "done"], ["noshow", "done", "noshow"], ["done"],
+      [], ["done", "done"], ["late", "late", "done"], ["done", "done", "done", "done", "done"], ["done"],
+      ["noshow"], ["done", "done", "late"], [], ["done", "done", "done"], ["done", "noshow"],
+      ["done"], ["done", "done", "done", "done"], [], ["late"], ["done", "done"],
+    ];
+    W.forEach((w, i) => HIST[i].forEach((o, k) => {
+      const j = job({ restaurantId: R[(i + k) % R.length].id, role: w.roles[0], date: today(-(k * 4 + (i % 4) + 2)) });
       J.push(j);
-      A.push({ id: uid(), jobId: j.id, workerId: w.id, status: o === "done" ? "confirmed" : "canceled", outcome: o, fee: o === "done" ? 12000 : 0, rehire: o === "done" && k === 0 });
+      A.push({ id: uid(), jobId: j.id, workerId: w.id, status: o === "done" ? "confirmed" : "canceled", outcome: o, fee: o === "done" ? Math.round(j.pay * state.feeRate / 100) : 0, rehire: o === "done" && k === 0 && i % 2 === 0 });
     }));
-    J.push({ id: uid(), restaurantId: R[0].id, role: "찬모", date: today(), start: "10:00", end: "18:00", pay: 130000, headcount: 1, memo: "점심·저녁 준비" });
-    J.push({ id: uid(), restaurantId: R[1].id, role: "서빙", date: today(1), start: "11:00", end: "16:00", pay: 85000, headcount: 2, memo: "" });
-    J.push({ id: uid(), restaurantId: R[2].id, role: "설거지", date: today(1), start: "17:00", end: "22:00", pay: 80000, headcount: 1, memo: "" });
+    // 앞으로의 일감: 오늘·내일, 같은 요청(찬모+서빙), 밤 근무, 여러 날 연속
+    J.push(job({ restaurantId: R[0].id, role: "찬모", date: today(), memo: "점심·저녁 준비" }));
+    const req = uid();
+    J.push(job({ restaurantId: R[2].id, role: "찬모", date: today(1), start: "09:00", end: "18:00", req }));
+    J.push(job({ restaurantId: R[2].id, role: "서빙", date: today(1), start: "11:00", end: "16:00", breakMin: 0, headcount: 2, req }));
+    J.push(job({ restaurantId: R[6].id, role: "설거지", date: today(1), start: "18:00", end: "23:00", breakMin: 0 }));
+    const g = uid();
+    [1, 2, 3].forEach((n) => J.push(job({ restaurantId: R[14].id, role: "서빙", date: today(n), start: "07:00", end: "15:00", group: g })));
     // 어제 확정했는데 출근 체크를 안 한 예시
-    const y = { id: uid(), restaurantId: R[0].id, role: "서빙", date: today(-1), start: "11:00", end: "15:00", pay: 70000, headcount: 1, memo: "" };
+    const y = job({ restaurantId: R[1].id, role: "서빙", date: today(-1), start: "11:00", end: "15:00", breakMin: 0 });
     J.push(y);
-    A.push({ id: uid(), jobId: y.id, workerId: W[2].id, status: "confirmed", outcome: "", fee: 0, rehire: false });
+    A.push({ id: uid(), jobId: y.id, workerId: W[1].id, status: "confirmed", outcome: "", fee: 0, rehire: false });
     state.restaurants.push(...R);
     state.workers.push(...W);
     state.jobs.push(...J);
     state.assigns.push(...A);
     refresh();
-    toast("연습용 자료를 넣었어요. 홈에서 시작해 보세요.");
+    toast("연습용 자료를 넣었어요 (구직자 20명, 식당 20곳)");
   };
 
   // ---------- 버튼 누름 처리 ----------
