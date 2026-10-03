@@ -2,7 +2,7 @@
   "use strict";
 
   // 앱 버전(APP_VERSION): 백업 화면에 표시. sw.js의 CACHE 이름과 같이 올림
-  const APP_VERSION = "v24";
+  const APP_VERSION = "v25";
   // 저장소 이름(KEY): 휴대폰 브라우저 안에 자료를 저장할 때 쓰는 이름
   const KEY = "dawon-mobile-v1";
   // 업무 종류(ROLES)
@@ -590,7 +590,7 @@
     const todayNeed = needJobs.filter((j) => j.date === today()).length;
     let html = `<section class="hero">
         <p class="hero-date">${now.getMonth() + 1}월 ${now.getDate()}일 ${WEEK[now.getDay()]}요일</p>
-        <p class="hero-title">${!hasData ? "반가워요,<br>다원 소개소예요" : needJobs.length ? `사람이 필요한 일<br><span class="num" data-count="${needJobs.length}" data-suffix="건">${needJobs.length}건</span>` : "빈자리 없이<br>다 채웠어요"}</p>
+        <p class="hero-title">${!hasData ? "반가워요,<br>다원 어머니회예요" : needJobs.length ? `사람이 필요한 일<br><span class="num" data-count="${needJobs.length}" data-suffix="건">${needJobs.length}건</span>` : "빈자리 없이<br>다 채웠어요"}</p>
         ${hasData && (todayNeed || checks.length) ? `<p class="hero-sub">${[todayNeed ? `오늘 ${todayNeed}건` : "", checks.length ? `출근 체크 ${checks.length}명` : ""].filter(Boolean).join(" · ")}</p>` : ""}
       </section>
       <div class="big-actions">
@@ -868,7 +868,7 @@
   };
 
   // ---------- 그리기 ----------
-  const TITLES = { home: "다원 소개소", jobs: "일감", people: "사람", scripts: "문자 문구", more: "백업·설정" };
+  const TITLES = { home: "다원 어머니회", jobs: "일감", people: "사람", scripts: "문자 문구", more: "백업·설정" };
   const screens = { home: renderHome, jobs: renderJobs, people: renderPeople, scripts: renderScripts, more: renderMore, job: renderJob, worker: renderWorker };
   const render = () => {
     const tab = { job: "jobs", worker: "people" }[route.name] || route.name;
