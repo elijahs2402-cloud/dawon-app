@@ -2,7 +2,7 @@
   "use strict";
 
   // 앱 버전(APP_VERSION): 백업 화면에 표시. sw.js의 CACHE 이름과 같이 올림
-  const APP_VERSION = "v30";
+  const APP_VERSION = "v31";
   // 저장소 이름(KEY): 휴대폰 브라우저 안에 자료를 저장할 때 쓰는 이름
   const KEY = "dawon-mobile-v1";
   // 업무 종류(ROLES)
@@ -645,9 +645,10 @@
     if (a.status === "confirmed" && a.outcome === "done") {
       state_ = `<span class="pill done-fill">${icon("check")}출근함</span> <span class="muted small">수수료 ${won(a.fee)}</span>`;
       buttons = `<button class="btn ${a.rehire ? "on" : ""}" data-act="toggle-rehire" data-id="${a.id}">${a.rehire ? icon("heart", "fill") + "식당이 또 찾음" : icon("heart") + "식당이 또 찾나요?"}</button>
-        <button class="btn ghost" data-act="undo-assign" data-id="${a.id}">되돌리기</button>`;
+        <button class="btn ghost" data-act="undo-assign" data-id="${a.id}">출근 취소</button>`;
     } else if (a.status === "confirmed") {
-      state_ = `<span class="pill confirmed">${icon("check")}확정</span>`;
+      // 확정 표시는 연한 파랑 카드 + 사진 위 체크로 대신함 (글자 표시 없음)
+      state_ = "";
       // 문자 버튼: 오늘·앞으로의 일 / 출근 체크 버튼: 오늘·지난 일 (오늘은 둘 다)
       const msgBtns = `${contactButtons(w, j, confirmMsg(j, w), icon("message") + "확정 문자")}
            ${rest(j.restaurantId)?.phone ? `<a class="btn" href="${smsHref(rest(j.restaurantId).phone, restMsg(j, w))}">${icon("message")}식당에 알림</a>` : `<button class="btn" data-act="copy-rest-msg" data-id="${a.id}">식당 문자 복사</button>`}`;
@@ -672,7 +673,9 @@
       state_ = `<span class="pill gray">${outcomeText[a.outcome] || "취소"}</span>`;
       buttons = `<button class="btn ghost" data-act="undo-assign" data-id="${a.id}">되돌리기</button>`;
     }
-    return `<div class="person-row ${a.status === "canceled" ? "dim" : ""}"><div class="who">${avatar(w)}<div>${head}<div class="status-line">${state_}</div></div></div><div class="btn-row">${buttons}</div></div>`;
+    // 확정된 분은 사진 오른쪽 아래에 파란 체크
+    const pic = a.status === "confirmed" ? `<span class="avatar-check">${avatar(w)}<span class="check-dot">${icon("check")}</span></span>` : avatar(w);
+    return `<div class="person-row ${a.status === "canceled" ? "dim" : ""}"><div class="who">${pic}<div>${head}${state_ ? `<div class="status-line">${state_}</div>` : ""}</div></div><div class="btn-row">${buttons}</div></div>`;
   };
 
   const candidateRow = (c, j, full) => {
