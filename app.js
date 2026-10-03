@@ -2,7 +2,7 @@
   "use strict";
 
   // 앱 버전(APP_VERSION): 백업 화면에 표시. sw.js의 CACHE 이름과 같이 올림
-  const APP_VERSION = "v14";
+  const APP_VERSION = "v15";
   // 저장소 이름(KEY): 휴대폰 브라우저 안에 자료를 저장할 때 쓰는 이름
   const KEY = "dawon-mobile-v1";
   // 업무 종류(ROLES)
@@ -73,10 +73,34 @@
     return Math.max(0, d - (Number(breakMin) || 0));
   };
   const hoursText = (min) => { const h = Math.floor(min / 60); const m = min % 60; return `${h ? `${h}시간` : ""}${h && m ? " " : ""}${m ? `${m}분` : ""}` || "0시간"; };
-  // 일당 = 시급 × 근무시간 (원 단위로 반올림)
-  const dayPayOf = (hourly, min) => Math.round((Number(hourly) || 0) * min / 60);
-  // 문자·화면용 급여 글: 시급이 있으면 "시급 11,000원 · 일당 88,000원"
-  const payText = (j) => (j.hourly ? `시급 ${won(j.hourly)} · 일당 ${won(j.pay)}` : `일당 ${won(j.pay)}`);
+  // 밤 시간(밤 10시~아침 6시)이 근무 중 몇 분인지
+  const NIGHT = [[0, 360], [1320, 1800], [2760, 2880]]; // 이틀에 걸친 근무까지 분 단위로 (22:00=1320, 다음날 06:00=1800)
+  const nightMinutes = (start, end) => {
+    if (!start || !end) return 0;
+    const s = toMin(start);
+    let e = toMin(end);
+    if (e <= s) e += 24 * 60;
+    return NIGHT.reduce((sum, [a, b]) => sum + Math.max(0, Math.min(e, b) - Math.max(s, a)), 0);
+  };
+  // 급여 나누기: 휴게시간은 낮 시간에서 먼저 빼고, 모자라면 밤 시간에서 뺌
+  const payBreakdown = (start, end, breakMin, hourly, nightHourly) => {
+    const total = workMinutes(start, end, 0);
+    const nightAll = nightMinutes(start, end);
+    let dayMin = total - nightAll;
+    let nightMin = nightAll;
+    const brk = Math.min(Number(breakMin) || 0, total);
+    const fromDay = Math.min(brk, dayMin);
+    dayMin -= fromDay;
+    nightMin -= brk - fromDay;
+    const nightRate = Number(nightHourly) || Number(hourly) || 0;
+    const pay = Math.round(((Number(hourly) || 0) * dayMin + nightRate * nightMin) / 60);
+    return { dayMin, nightMin, nightRate, pay };
+  };
+  const hasNightRate = (j) => Boolean(j.nightHourly && Number(j.nightHourly) !== Number(j.hourly) && nightMinutes(j.start, j.end));
+  // 문자·화면용 급여 글: "시급 11,000원(밤 16,500원) · 일당 110,000원"
+  const payText = (j) => (j.hourly
+    ? `시급 ${won(j.hourly)}${hasNightRate(j) ? `(밤 ${won(j.nightHourly)})` : ""} · 일당 ${won(j.pay)}`
+    : `일당 ${won(j.pay)}`);
   // 시간을 "오전 9:00"처럼
   const timeLabel = (t) => {
     if (!t) return "";
@@ -616,7 +640,7 @@
       <div class="facts">
         <div class="fact"><small>시간</small><strong>${esc(j.start)}~${esc(j.end)}</strong></div>
         <div class="fact"><small>근무${j.breakMin ? ` (휴게 ${hoursText(Number(j.breakMin))})` : ""}</small><strong>${hoursText(workMinutes(j.start, j.end, j.breakMin))}</strong></div>
-        ${j.hourly ? `<div class="fact"><small>시급</small><strong>${esc(won(j.hourly))}</strong></div>` : ""}
+        ${j.hourly ? `<div class="fact"><small>시급</small><strong>${esc(won(j.hourly))}${hasNightRate(j) ? `<span class="night-rate">밤 ${esc(won(j.nightHourly))}</span>` : ""}</strong></div>` : ""}
         <div class="fact"><small>일당${j.hourly ? " (총)" : ""}</small><strong>${esc(won(j.pay))}</strong></div>
         <div class="fact"><small>필요 인원</small><strong>${esc(j.headcount)}명</strong></div>
         <div class="fact"><small>지역</small><strong>${esc(r?.area || "-")}</strong></div>
@@ -827,7 +851,7 @@
   const MAX_DAYS = 14;
 
   const jobForm = (existing) => {
-    const j = existing || { date: today(), start: "", end: "", hourly: "", breakMin: 0, pay: "", headcount: 1, role: "", memo: "", restaurantId: "" };
+    const j = existing || { date: today(), start: "", end: "", hourly: "", nightHourly: "", breakMin: 0, pay: "", headcount: 1, role: "", memo: "", restaurantId: "" };
     // 최근에 일감을 준 식당이 위로
     const lastUse = (r) => state.jobs.filter((x) => x.restaurantId === r.id).map((x) => x.date).sort().pop() || "";
     const rests = [...state.restaurants].sort((a, b) => lastUse(b).localeCompare(lastUse(a)) || a.name.localeCompare(b.name, "ko"));
@@ -860,8 +884,11 @@
       <fieldset class="field"><legend>휴게시간 <span class="hint" style="display:inline">시급 계산에서 빠져요</span></legend>
         <div class="chips">${BREAKS.map(([v, label]) => `<label class="chip"><input type="radio" name="breakMin" value="${v}" ${Number(j.breakMin || 0) === v ? "checked" : ""} /><span>${label}</span></label>`).join("")}</div>
       </fieldset>
-      <label class="field">시급 (원)<input name="hourly" inputmode="numeric" placeholder="예: 11000" value="${esc(j.hourly || "")}" />
-        <span class="pay-calc" id="pay-calc"></span></label>
+      <label class="field">시급 (원)<input name="hourly" inputmode="numeric" placeholder="예: 11000" value="${esc(j.hourly || "")}" /></label>
+      <div class="field night-field" hidden>밤 시급 (밤 10시~아침 6시)
+        <span class="name-search"><input name="nightHourly" inputmode="numeric" placeholder="비워 두면 낮 시급과 같아요" value="${esc(j.nightHourly || "")}" /><button type="button" class="name-search-btn" data-night-x="1.5">1.5배</button></span>
+      </div>
+      <span class="pay-calc" id="pay-calc"></span>
       <div class="field">필요 인원<div class="stepper"><button type="button" data-step="-1" aria-label="줄이기">${icon("minus")}</button><input name="headcount" type="number" min="1" max="20" value="${esc(j.headcount)}" /><button type="button" data-step="1" aria-label="늘리기">${icon("plus")}</button></div></div>
       <label class="field">메모<textarea name="memo" rows="2" placeholder="예: 앞치마 지참">${esc(j.memo)}</textarea></label>`;
 
@@ -887,15 +914,6 @@
         bindAddress(form, "r", form.elements.rArea);
         bindPlace(form, "r");
         // 시간 칸: 시·분을 고르면 숨은 칸에 "HH:MM"으로 넣음
-        const setPicker = (name, value) => {
-          const wrap = form.querySelector(`[data-time="${name}"]`);
-          const [h, m] = value ? value.split(":").map(Number) : ["", 0];
-          wrap.querySelector('[data-part="h"]').value = value ? String(h) : "";
-          const ms = wrap.querySelector('[data-part="m"]');
-          if (value && ![...ms.options].some((o) => Number(o.value) === m)) ms.insertAdjacentHTML("beforeend", `<option value="${m}">${String(m).padStart(2, "0")}분</option>`);
-          ms.value = String(m || 0);
-          form.elements[name].value = value || "";
-        };
         form.querySelectorAll(".time-pick").forEach((wrap) => wrap.addEventListener("change", () => {
           const h = wrap.querySelector('[data-part="h"]').value;
           const m = wrap.querySelector('[data-part="m"]').value;
@@ -903,13 +921,23 @@
           calc();
         }));
         // 시급 × 근무시간 = 일당 계산해서 바로 보여줌
+        const num = (el) => Number(String(el.value).replace(/[^0-9]/g, ""));
         const calc = () => {
-          const hourly = Number(String(form.elements.hourly.value).replace(/[^0-9]/g, ""));
-          const min = workMinutes(form.elements.start.value, form.elements.end.value, form.querySelector("input[name=breakMin]:checked")?.value);
+          const hourly = num(form.elements.hourly);
+          const night = num(form.elements.nightHourly);
+          const start = form.elements.start.value;
+          const end = form.elements.end.value;
+          const brk = form.querySelector("input[name=breakMin]:checked")?.value;
+          const min = workMinutes(start, end, brk);
+          // 밤 시간이 들어간 근무일 때만 밤 시급 칸을 보여줌
+          form.querySelector(".night-field").hidden = !nightMinutes(start, end);
           const out = $("#pay-calc", form);
           if (hourly && min) {
-            const pay = dayPayOf(hourly, min);
-            out.innerHTML = `${won(hourly)} × ${hoursText(min)} = <strong>일당 ${won(pay)}</strong><small>수수료 ${won(Math.round(pay * state.feeRate / 100))}</small>`;
+            const b = payBreakdown(start, end, brk, hourly, night);
+            const parts = b.nightMin
+              ? `${b.dayMin ? `낮 ${hoursText(b.dayMin)} × ${won(hourly)} + ` : ""}밤 ${hoursText(b.nightMin)} × ${won(b.nightRate)}`
+              : `${won(hourly)} × ${hoursText(b.dayMin)}`;
+            out.innerHTML = `${parts} = <strong>일당 ${won(b.pay)}</strong><small>수수료 ${won(Math.round(b.pay * state.feeRate / 100))}</small>`;
           } else if (existing?.pay && !existing.hourly && !hourly) {
             out.innerHTML = `예전에 넣은 일당: <strong>${won(existing.pay)}</strong><small>시급을 넣으면 다시 계산돼요</small>`;
           } else out.innerHTML = min ? `근무 ${hoursText(min)} · 시급을 넣으면 일당이 계산돼요` : "";
@@ -941,25 +969,20 @@
         form.elements.dateEnd.addEventListener("change", syncDates);
         form.querySelectorAll("input[name=breakMin]").forEach((i) => i.addEventListener("change", calc));
         form.elements.hourly.addEventListener("input", calc);
+        form.elements.nightHourly.addEventListener("input", calc);
+        // [1.5배]: 낮 시급 × 1.5를 밤 시급 칸에 넣음
+        form.querySelector("[data-night-x]").addEventListener("click", () => {
+          const h = num(form.elements.hourly);
+          if (!h) { toast("낮 시급을 먼저 넣어 주세요"); form.elements.hourly.focus(); return; }
+          form.elements.nightHourly.value = Math.round(h * 1.5);
+          calc();
+        });
         const syncNew = () => {
           const isNew = select.value === "__new";
           box.hidden = !isNew;
           form.elements.rName.required = isNew;
         };
-        select.addEventListener("change", () => {
-          syncNew();
-          // 새 일감이면 그 식당의 지난번 조건을 자동으로 채움
-          if (existing || select.value === "__new") return;
-          const last = state.jobs.filter((x) => x.restaurantId === select.value).sort(sortJobs).pop();
-          if (!last) return;
-          form.querySelectorAll("input[name=role]").forEach((i) => { i.checked = i.value === last.role; });
-          setPicker("start", last.start);
-          setPicker("end", last.end);
-          form.querySelectorAll("input[name=breakMin]").forEach((i) => { i.checked = Number(i.value) === Number(last.breakMin || 0); });
-          if (last.hourly) form.elements.hourly.value = last.hourly;
-          calc();
-          toast("지난번 조건을 채워 넣었어요");
-        });
+        select.addEventListener("change", syncNew);
         syncNew();
         syncDates();
         calc();
@@ -978,9 +1001,11 @@
           restaurantId = r.id;
         }
         const hourly = Number(val(fd, "hourly").replace(/[^0-9]/g, "")) || 0;
+        // 밤 근무가 없으면 밤 시급은 저장하지 않음
+        const nightHourly = nightMinutes(start, end) ? Number(val(fd, "nightHourly").replace(/[^0-9]/g, "")) || 0 : 0;
         const breakMin = Number(val(fd, "breakMin")) || 0;
-        // 일당: 시급이 있으면 시급 × 근무시간, 없으면 예전 일당 그대로
-        const pay = hourly ? dayPayOf(hourly, workMinutes(start, end, breakMin)) : Number(existing?.pay) || 0;
+        // 일당: 시급이 있으면 낮·밤 나눠 계산, 없으면 예전 일당 그대로
+        const pay = hourly ? payBreakdown(start, end, breakMin, hourly, nightHourly).pay : Number(existing?.pay) || 0;
         const data = {
           restaurantId,
           role: val(fd, "role"),
@@ -988,6 +1013,7 @@
           end,
           breakMin,
           hourly,
+          nightHourly,
           pay,
           headcount: Math.max(1, Number(val(fd, "headcount")) || 1),
           memo: val(fd, "memo"),

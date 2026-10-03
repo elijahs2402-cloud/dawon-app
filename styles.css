@@ -460,3 +460,7 @@ body { overflow-x: hidden; }
 .date-range.multi { flex-direction: column; align-items: stretch; gap: 4px; }
 .date-range.multi .range-to { text-align: center; }
 .time-pick { grid-template-columns: 1.5fr 1fr; }
+.night-field[hidden] { display: none; }
+.night-field .name-search input { margin-top: 8px; }
+#pay-calc { margin: -6px 0 18px; }
+.night-rate { display: block; margin-top: 2px; color: var(--sub); font-size: .82rem; font-weight: 700; }
