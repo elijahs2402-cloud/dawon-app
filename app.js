@@ -2,7 +2,7 @@
   "use strict";
 
   // 앱 버전(APP_VERSION): 백업 화면에 표시. sw.js의 CACHE 이름과 같이 올림
-  const APP_VERSION = "v17";
+  const APP_VERSION = "v18";
   // 저장소 이름(KEY): 휴대폰 브라우저 안에 자료를 저장할 때 쓰는 이름
   const KEY = "dawon-mobile-v1";
   // 업무 종류(ROLES)
@@ -125,7 +125,7 @@
   ];
 
   // ---------- 자료 저장/불러오기 ----------
-  const blank = () => ({ version: 1, restaurants: [], workers: [], jobs: [], assigns: [], scripts: defaultScripts(), feeRate: 10, rates: {}, lastBackup: "" });
+  const blank = () => ({ version: 1, restaurants: [], workers: [], jobs: [], assigns: [], scripts: defaultScripts(), feeRate: 10, rate: { day: 12000, night: 0 }, lastBackup: "" });
   const isValidData = (s) => s && Array.isArray(s.workers) && Array.isArray(s.jobs) && Array.isArray(s.assigns) && Array.isArray(s.restaurants);
   const load = () => {
     try {
@@ -789,13 +789,11 @@
       <button class="btn primary" data-act="save-fee">저장</button>
     </div>
     <div class="card rate-card">
-      <div class="rate-title"><span class="menu-ic">${icon("edit")}</span><div><strong>업무별 기본 시급</strong><small>일감 받기에서 업무를 고르면 자동으로 들어가요</small></div></div>
-      <div class="rate-head"><span></span><span>낮 시급</span><span>밤 시급 <small>(밤 10시~아침 6시)</small></span></div>
-      ${ROLES.map((r, i) => `<div class="rate-row">
-        <strong>${r}</strong>
-        <input id="rate-d-${i}" inputmode="numeric" placeholder="예: 11000" value="${esc(state.rates?.[r]?.day || "")}" />
-        <span class="rate-night"><input id="rate-n-${i}" inputmode="numeric" placeholder="낮과 같음" value="${esc(state.rates?.[r]?.night || "")}" /><button type="button" class="rate-x" data-act="rate-x" data-i="${i}">1.5배</button></span>
-      </div>`).join("")}
+      <div class="rate-title"><span class="menu-ic">${icon("edit")}</span><div><strong>기본 시급</strong><small>모든 업무에 같이 쓰고, 일감 받기에서 자동으로 들어가요</small></div></div>
+      <label class="field">낮 시급 (원)<input id="rate-d" inputmode="numeric" placeholder="예: 12000" value="${esc(state.rate?.day || "")}" /></label>
+      <div class="field">밤 시급 (밤 10시~아침 6시)
+        <span class="name-search"><input id="rate-n" inputmode="numeric" placeholder="비워 두면 낮 시급과 같아요" value="${esc(state.rate?.night || "")}" /><button type="button" class="name-search-btn" data-act="rate-x">1.5배</button></span>
+      </div>
       <button class="btn primary big" data-act="save-rates">기본 시급 저장</button>
       <p class="hint" style="margin-top:8px">이미 만든 일감의 시급은 바뀌지 않아요. 식당마다 다르면 일감 받기에서 그 칸만 고치면 돼요.</p>
     </div>
@@ -887,7 +885,7 @@
     // 업무 한 줄: 인원 + 시급 + (밤 근무면) 밤 시급 + 계산
     const roleRow = (i) => {
       // 고칠 때는 그 일감 값, 새로 받을 때는 설정의 기본 시급
-      const rate = state.rates?.[ROLES[i]] || {};
+      const rate = state.rate || {};
       const mine = existing && existing.role === ROLES[i] ? existing : { hourly: rate.day || "", nightHourly: rate.night || "" };
       return `<div class="role-row" data-i="${i}">
         <div class="role-row-head"><strong>${ROLES[i]}</strong>
@@ -1746,15 +1744,14 @@
     "import-vcf": () => $("#vcf-file").click(),
     "save-rates": () => {
       const n = (id) => Number(String($(`#${id}`)?.value || "").replace(/[^0-9]/g, "")) || 0;
-      state.rates = Object.fromEntries(ROLES.map((r, i) => [r, { day: n(`rate-d-${i}`), night: n(`rate-n-${i}`) }]));
+      state.rate = { day: n("rate-d"), night: n("rate-n") };
       refresh();
       toast("기본 시급을 저장했어요. 다음 일감부터 자동으로 들어가요");
     },
     "rate-x": (el) => {
-      const i = el.dataset.i;
-      const day = Number(String($(`#rate-d-${i}`).value).replace(/[^0-9]/g, ""));
-      if (!day) { toast("낮 시급을 먼저 넣어 주세요"); $(`#rate-d-${i}`).focus(); return; }
-      $(`#rate-n-${i}`).value = Math.round(day * 1.5);
+      const day = Number(String($("#rate-d").value).replace(/[^0-9]/g, ""));
+      if (!day) { toast("낮 시급을 먼저 넣어 주세요"); $("#rate-d").focus(); return; }
+      $("#rate-n").value = Math.round(day * 1.5);
     },
     "save-fee": () => { const n = Number($("#fee-rate").value); if (!(n >= 0 && n <= 100)) { toast("0~100 사이로 적어 주세요"); return; } state.feeRate = n; refresh(); toast("저장했어요"); },
     "seed": seed,
