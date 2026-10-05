@@ -2,7 +2,7 @@
   "use strict";
 
   // 앱 버전(APP_VERSION): 설정 화면 맨 아래에 표시. sw.js의 CACHE 이름과 같이 올림
-  const APP_VERSION = "v43";
+  const APP_VERSION = "v44";
   // 저장소 이름(KEY): 휴대폰 브라우저 안에 자료를 저장할 때 쓰는 이름
   const KEY = "dawon-mobile-v1";
   // 업무 종류(ROLES)
@@ -635,7 +635,7 @@
     .sort((x, y) => sortJobs(x.j, y.j));
 
   const checkRow = ({ a, j, w }) => `<div class="check-row">
-      <div class="who">${avatar(w)}<div><button class="name-link" data-act="open-worker" data-id="${w.id}">${esc(w.name)}</button>
+      <div class="who"><button class="avatar-link" data-act="open-worker" data-id="${w.id}" aria-label="${esc(w.name)} 보기">${avatar(w)}</button><div><button class="name-link" data-act="open-worker" data-id="${w.id}">${esc(w.name)}</button>
       <div class="muted small">${esc(dateText(j.date))} · ${esc(restName(j))} ${esc(j.role)}</div></div></div>
       <div class="btn-row">
         <button class="btn" data-act="outcome" data-id="${a.id}" data-v="done">${icon("check")}출근함</button>
@@ -652,7 +652,7 @@
     const { w, j } = list[0]; // 가장 오래된 일
     const late = daysBetween(j.date, today()) > 0;
     return `<div class="check-row">
-      <div class="who">${avatar(w)}<div><button class="name-link" data-act="open-worker" data-id="${w.id}">${esc(w.name)}</button>
+      <div class="who"><button class="avatar-link" data-act="open-worker" data-id="${w.id}" aria-label="${esc(w.name)} 보기">${avatar(w)}</button><div><button class="name-link" data-act="open-worker" data-id="${w.id}">${esc(w.name)}</button>
       <div class="small"><strong>${won(feeSumOf(list))}</strong> <span class="muted">· ${list.length}건</span> · <span class="${late ? "overdue" : "muted"}">${late ? `${icon("alert")}${overdueText(j)}` : "오늘 일"}</span></div></div></div>
       <div class="btn-row">
         ${w.phone ? `<a class="btn" href="${smsHref(w.phone, feeMsg(w, list))}">${icon("message")}수수료 안내</a>` : ""}

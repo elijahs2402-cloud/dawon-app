@@ -524,3 +524,6 @@ body { overflow-x: hidden; }
 .segment.seg4 { grid-template-columns: repeat(4, 1fr); margin-bottom: 12px; }
 /* 신뢰 표시: 흰 상자 없이 바탕 위에 바로 */
 .trust-card .hint { margin: 0 4px; }
+/* 사진을 눌러도 그 사람 화면으로 */
+.avatar-link { flex: none; padding: 0; border: 0; background: none; border-radius: 50%; cursor: pointer; line-height: 0; }
+.avatar-link:active { opacity: .7; }
