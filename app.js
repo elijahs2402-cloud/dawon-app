@@ -2,7 +2,7 @@
   "use strict";
 
   // 앱 버전(APP_VERSION): 설정 화면 맨 아래에 표시. sw.js의 CACHE 이름과 같이 올림
-  const APP_VERSION = "v40";
+  const APP_VERSION = "v41";
   // 저장소 이름(KEY): 휴대폰 브라우저 안에 자료를 저장할 때 쓰는 이름
   const KEY = "dawon-mobile-v1";
   // 업무 종류(ROLES)
@@ -140,13 +140,21 @@
   };
 
   // ---------- 자료 저장/불러오기 ----------
-  const blank = () => ({ version: 1, restaurants: [], workers: [], jobs: [], assigns: [], scripts: defaultScripts(), feeRate: 10, rate: { day: 12000, night: 0 }, lastBackup: "" });
+  // account: 수수료 받을 계좌 (예: 농협 123-4567-8901 김다원) / feeTrack: 수수료 받음 표시 기능을 쓰기 시작했는지
+  const blank = () => ({ version: 1, restaurants: [], workers: [], jobs: [], assigns: [], scripts: defaultScripts(), feeRate: 10, rate: { day: 12000, night: 0 }, account: "", feeTrack: true, lastBackup: "" });
+  // 수수료 받음 표시가 생기기 전의 출근 기록은 모두 '받음'으로 봄 (한 번만)
+  const startFeeTrack = (st) => {
+    if (st.feeTrack) return;
+    st.assigns.forEach((a) => { if (a.outcome === "done") a.paid = true; });
+    st.feeTrack = true;
+  };
   const isValidData = (s) => s && Array.isArray(s.workers) && Array.isArray(s.jobs) && Array.isArray(s.assigns) && Array.isArray(s.restaurants);
   const load = () => {
     try {
       const saved = JSON.parse(localStorage.getItem(KEY));
       if (isValidData(saved)) {
-        const st = { ...blank(), ...saved };
+        const st = { ...blank(), feeTrack: false, ...saved };
+        startFeeTrack(st);
         st.scripts = refreshOldScripts((st.scripts || []).filter((x) => !(x.id === "s5" && STANDBY_TEXTS.includes(x.text))));
         // 대기 기능을 뺐으므로 '대기 중'이던 분은 '연락함'으로 바꿈
         st.assigns.forEach((a) => { if (a.status === "standby") a.status = "asked"; });
@@ -444,6 +452,26 @@
   };
   // 사람 줄의 '식당에 알림'도 일감 화면의 '식당 문자'와 같은 내용
   const restMsg = (j) => restJobMsg(j);
+
+  // ---------- 수수료 받기 ----------
+  // 출근했고 수수료가 있는데 아직 '받음' 표시가 없는 기록
+  const isUnpaid = (a) => a.outcome === "done" && !a.paid && (Number(a.fee) || 0) > 0;
+  // 안 받은 수수료 목록 (오래된 일부터). workerId를 주면 그 사람 것만
+  const unpaidList = (workerId) => state.assigns
+    .filter((a) => isUnpaid(a) && (!workerId || a.workerId === workerId))
+    .map((a) => ({ a, j: job(a.jobId), w: worker(a.workerId) }))
+    .filter((x) => x.j && x.w)
+    .sort((x, y) => x.j.date.localeCompare(y.j.date));
+  const feeSumOf = (list) => list.reduce((sum, x) => sum + (Number(x.a.fee) || 0), 0);
+  // 일한 날부터 며칠 지났는지 (일한 날 받는 게 원칙이라 다음 날부터 '지남')
+  const overdueText = (j) => { const d = daysBetween(j.date, today()); return d <= 0 ? "오늘 일" : `${d}일 지남`; };
+  // 수수료 안내 문자: 날짜별 금액, 합계, 입금 계좌
+  const feeMsg = (w, list) => letter(
+    `[다원] ${w.name}님, 수수료 안내드려요.`,
+    section("수수료", ...list.map(({ a, j }) => `${shortDate(j.date)} ${restName(j)} ${j.role} ${won(a.fee)}`), list.length > 1 ? `합계 ${won(feeSumOf(list))}` : ""),
+    state.account ? section("입금 계좌", state.account, "입금자명은 본인 이름으로 해 주세요.") : "",
+    "확인 부탁드려요. 고맙습니다.",
+  );
   // ---------- 알림(토스트) ----------
   let toastTimer;
   const toast = (msg) => {
@@ -609,6 +637,24 @@
         <button class="btn warn" data-act="cancel-ask" data-id="${a.id}">${icon("x")}확정 취소</button>
       </div></div>`;
 
+  // 받을 수수료: 사람별로 묶어서 (가장 오래 밀린 사람부터)
+  const unpaidByWorker = () => {
+    const map = new Map();
+    unpaidList().forEach((x) => { if (!map.has(x.w.id)) map.set(x.w.id, []); map.get(x.w.id).push(x); });
+    return [...map.values()];
+  };
+  const feeRow = (list) => {
+    const { w, j } = list[0]; // 가장 오래된 일
+    const late = daysBetween(j.date, today()) > 0;
+    return `<div class="check-row">
+      <div class="who">${avatar(w)}<div><button class="name-link" data-act="open-worker" data-id="${w.id}">${esc(w.name)}</button>
+      <div class="small"><strong>${won(feeSumOf(list))}</strong> <span class="muted">· ${list.length}건</span> · <span class="${late ? "overdue" : "muted"}">${late ? `${icon("alert")}${overdueText(j)}` : "오늘 일"}</span></div></div></div>
+      <div class="btn-row">
+        ${w.phone ? `<a class="btn" href="${smsHref(w.phone, feeMsg(w, list))}">${icon("message")}수수료 안내</a>` : ""}
+        <button class="btn" data-act="pay-all" data-id="${w.id}">${icon("check")}${list.length > 1 ? "모두 받음" : "받음"}</button>
+      </div></div>`;
+  };
+
   const renderHome = () => {
     const hasData = state.workers.length || state.jobs.length;
     const needJobs = state.jobs.filter((j) => j.date >= today() && jobNeed(j) > 0).sort(sortJobs);
@@ -645,9 +691,21 @@
     if (checks.length) {
       html += `<h2>출근했는지 체크해 주세요 <span class="count">${checks.length}</span></h2><div class="card">${checks.map(checkRow).join("")}</div>`;
     }
+    // 받을 수수료 (아직 입금 확인 안 된 것)
+    const owed = unpaidByWorker();
+    if (owed.length) {
+      html += `<h2>받을 수수료 <span class="count">${won(feeSumOf(owed.flat()))}</span></h2><div class="card">${owed.map(feeRow).join("")}
+        ${state.account ? "" : `<p class="hint" style="margin-top:12px">설정에 계좌번호를 적어 두면 수수료 안내 문자에 같이 들어가요.</p>`}</div>`;
+    }
     html += `<h2>오늘·내일 확정된 일</h2>`;
     html += fullJobs.length ? fullJobs.map(jobCard).join("") : `<div class="empty">아직 없어요</div>`;
-    html += `<h2>이번 달</h2><div class="month"><div><small>출근 완료</small><strong data-count="${doneThisMonth.length}" data-suffix="건">${doneThisMonth.length}건</strong></div><div><small>수수료 (${esc(state.feeRate)}%)</small><strong data-count="${feeSum}" data-suffix="원">${feeSum.toLocaleString("ko-KR")}원</strong></div></div>`;
+    // 이번 달: 출근 완료 / 받은 수수료 / 받을 수수료
+    const paidSum = doneThisMonth.filter((a) => a.paid).reduce((sum, a) => sum + (Number(a.fee) || 0), 0);
+    const owedSum = feeSum - paidSum;
+    html += `<h2>이번 달</h2><div class="month">
+      <div class="wide"><small>출근 완료</small><strong data-count="${doneThisMonth.length}" data-suffix="건">${doneThisMonth.length}건</strong></div>
+      <div><small>받은 수수료</small><strong data-count="${paidSum}" data-suffix="원">${paidSum.toLocaleString("ko-KR")}원</strong></div>
+      <div><small>받을 수수료</small><strong class="${owedSum ? "overdue" : ""}" data-count="${owedSum}" data-suffix="원">${owedSum.toLocaleString("ko-KR")}원</strong></div></div>`;
     return html;
   };
 
@@ -680,8 +738,13 @@
     let side = ""; // 이름 줄 오른쪽 상태 글자 (토스식: 확정=파랑, 출근함=초록)
     if (a.status === "confirmed" && a.outcome === "done") {
       side = `<strong class="row-state ok">출근함</strong>`;
-      state_ = `<span class="muted small">수수료 ${won(a.fee)}</span>`;
-      buttons = `<button class="btn ${a.rehire ? "on" : ""}" data-act="toggle-rehire" data-id="${a.id}">${a.rehire ? icon("heart", "fill") + "식당이 또 찾음" : icon("heart") + "식당이 또 찾나요?"}</button>
+      // 수수료: 받음 / 미수(며칠 지났는지)
+      const fee = Number(a.fee) || 0;
+      state_ = fee ? `<span class="small">수수료 ${won(fee)} · ${a.paid ? `<span class="paid">${icon("check")}받음</span>` : `<span class="overdue">미수 · ${overdueText(j)}</span>`}</span>` : "";
+      const feeBtns = !fee ? "" : a.paid
+        ? `<button class="btn ghost" data-act="toggle-paid" data-id="${a.id}">받음 취소</button>`
+        : `<button class="btn" data-act="toggle-paid" data-id="${a.id}">${icon("check")}수수료 받음</button>${w.phone ? `<a class="btn" href="${smsHref(w.phone, feeMsg(w, [{ a, j }]))}">${icon("message")}수수료 안내</a>` : ""}`;
+      buttons = `${feeBtns}<button class="btn ${a.rehire ? "on" : ""}" data-act="toggle-rehire" data-id="${a.id}">${a.rehire ? icon("heart", "fill") + "식당이 또 찾음" : icon("heart") + "식당이 또 찾나요?"}</button>
         <button class="btn ghost" data-act="undo-assign" data-id="${a.id}">출근 취소</button>`;
     } else if (a.status === "confirmed") {
       side = `<strong class="row-state">확정</strong>`;
@@ -821,7 +884,13 @@
     const past = rows.filter((x) => !upcoming.includes(x)).slice(0, 20);
     const ranks = (w.roles || []).map((role) => ({ role, ...rankIn(role, w.id) })).filter((r) => r.pos > 0);
     const line = ({ a, j }) => `<li><button class="name-link" data-act="open-job" data-id="${j.id}">${esc(dateText(j.date))} ${esc(restName(j))}</button> <span class="muted small">${esc(j.role)}</span><br>
-      <span class="small">${a.outcome ? outcomeText[a.outcome] : statusText[a.status]}${a.rehire ? ` · ${icon("heart", "fill")}식당이 또 찾음` : ""}</span></li>`;
+      <span class="small">${a.outcome ? outcomeText[a.outcome] : statusText[a.status]}${a.rehire ? ` · ${icon("heart", "fill")}식당이 또 찾음` : ""}${a.outcome === "done" && Number(a.fee) ? ` · 수수료 ${a.paid ? "받음" : `<span class="overdue">미수</span>`}` : ""}</span></li>`;
+    // 이 분의 받을 수수료
+    const owed = unpaidList(w.id);
+    const owedCard = owed.length ? `<div class="card fee-owed">
+      <div class="progress-head"><strong>받을 수수료 ${won(feeSumOf(owed))}</strong><span class="${daysBetween(owed[0].j.date, today()) > 0 ? "overdue" : "muted"}">${owed.length}건 · ${overdueText(owed[0].j)}</span></div>
+      <ul class="history">${owed.map(({ a, j }) => `<li>${esc(shortDate(j.date))} ${esc(restName(j))} ${esc(j.role)} · <strong>${won(a.fee)}</strong> <span class="small ${daysBetween(j.date, today()) > 0 ? "overdue" : "muted"}">${overdueText(j)}</span></li>`).join("")}</ul>
+      <div class="btn-row">${w.phone ? `<a class="btn" href="${smsHref(w.phone, feeMsg(w, owed))}">${icon("message")}수수료 안내</a>` : ""}<button class="btn" data-act="pay-all" data-id="${w.id}">${icon("check")}${owed.length > 1 ? "모두 받음" : "받음"}</button></div></div>` : "";
 
     return `<div class="card">
       <div class="who"><button class="avatar-btn" data-act="edit-worker" data-id="${w.id}" aria-label="사진 바꾸기">${avatar(w, "big")}<small>사진 바꾸기</small></button><div>
@@ -831,6 +900,7 @@
       ${w.memo ? `<p class="meta-line" style="margin-top:8px">${icon("note")}${esc(w.memo)}</p>` : ""}
       <div class="btn-row">${w.phone ? `<a class="btn primary" href="${telHref(w.phone)}">${icon("phone")}전화</a><a class="btn" href="${smsHref(w.phone, "")}">${icon("message")}문자</a>` : ""}<button class="btn" data-act="edit-worker" data-id="${w.id}">${icon("edit")}고치기</button></div>
     </div>
+    ${owedCard}
     <h2>약속 기록</h2>
     <div class="stat-grid"><div><strong>${s.done}</strong><small>${icon("check")}출근</small></div><div><strong>${s.late}</strong><small>${icon("alert")}직전취소</small></div><div><strong>${s.noshow}</strong><small>${icon("x")}안 나옴</small></div><div><strong>${s.rehire}</strong><small>${icon("heart", "fill")}또 찾음</small></div></div>
     ${ranks.length ? `<div class="card"><p style="margin:0"><strong>지금 추천 순서</strong></p>${ranks.map((r) => `<p class="small" style="margin:4px 0 0">${esc(r.role)}: ${r.total}명 중 <strong>${r.pos}번째</strong></p>`).join("")}<p class="hint">약속 잘 지키고 오래 쉰 분이 앞 순서예요. 재촉 전화가 오면 참고하세요.</p></div>` : ""}
@@ -874,6 +944,11 @@
       <label class="fee-label" for="fee-rate"><strong>수수료</strong><small>일당의 몇 %인지</small></label>
       <div class="fee-input"><input id="fee-rate" type="number" inputmode="numeric" min="0" max="100" value="${esc(state.feeRate)}" /><span>%</span></div>
       <button class="btn primary" data-act="save-fee">저장</button>
+    </div>
+    <div class="card rate-card">
+      <div class="rate-title"><span class="menu-ic">${icon("download")}</span><div><strong>수수료 받을 계좌</strong><small>수수료 안내 문자에 같이 들어가요</small></div></div>
+      <label class="field">은행 · 계좌번호 · 이름<input id="fee-account" placeholder="예: 농협 123-4567-8901 김다원" value="${esc(state.account || "")}" /></label>
+      <button class="btn primary big" data-act="save-account">계좌 저장</button>
     </div>
     <div class="card rate-card">
       <div class="rate-title"><span class="menu-ic">${icon("edit")}</span><div><strong>기본 시급</strong><small>모든 업무에 같이 쓰고, 일감 받기에서 자동으로 들어가요</small></div></div>
@@ -1579,8 +1654,8 @@
   // 출근 결과 기록
   const setOutcome = (a, v) => {
     const j = job(a.jobId);
-    if (v === "done") { a.status = "confirmed"; a.outcome = "done"; a.fee = Math.round((Number(j?.pay) || 0) * state.feeRate / 100); }
-    else { a.status = "canceled"; a.outcome = v; a.fee = 0; a.rehire = false; }
+    if (v === "done") { a.status = "confirmed"; a.outcome = "done"; a.fee = Math.round((Number(j?.pay) || 0) * state.feeRate / 100); a.paid = false; a.paidAt = ""; }
+    else { a.status = "canceled"; a.outcome = v; a.fee = 0; a.rehire = false; a.paid = false; }
     save();
   };
 
@@ -1655,7 +1730,8 @@
       if (!isValidData(data)) throw new Error("bad");
       if (!confirm(`백업 파일을 불러오면 지금 휴대폰의 자료가 백업 내용으로 바뀌어요.\n(구직자 ${data.workers.length}명, 일감 ${data.jobs.length}건)\n계속할까요?`)) return;
       const { photos: savedPhotos = {}, ...rest } = data;
-      state = { ...blank(), ...rest };
+      state = { ...blank(), feeTrack: false, ...rest };
+      startFeeTrack(state);
       // 예전 백업의 '대기 중'은 '연락함'으로 바꿈
       state.assigns.forEach((a) => { if (a.status === "standby") a.status = "asked"; });
       photos.clear();
@@ -1800,7 +1876,7 @@
     W.forEach((w, i) => HIST[i].forEach((o, k) => {
       const j = job({ restaurantId: R[(i + k) % R.length].id, role: w.roles[0], date: today(-(k * 4 + (i % 4) + 2)) });
       J.push(j);
-      A.push({ id: uid(), demo: true, jobId: j.id, workerId: w.id, status: o === "done" ? "confirmed" : "canceled", outcome: o, fee: o === "done" ? Math.round(j.pay * state.feeRate / 100) : 0, rehire: o === "done" && k === 0 && i % 2 === 0 });
+      A.push({ id: uid(), demo: true, jobId: j.id, workerId: w.id, status: o === "done" ? "confirmed" : "canceled", outcome: o, fee: o === "done" ? Math.round(j.pay * state.feeRate / 100) : 0, rehire: o === "done" && k === 0 && i % 2 === 0, paid: o === "done" && !((k === 0 && i % 4 === 1) || (k === 1 && i === 8)) });
     }));
     // 앞으로의 일감: 오늘·내일, 같은 요청(찬모+서빙), 밤 근무, 여러 날 연속
     J.push(job({ restaurantId: R[0].id, role: "찬모", date: today(), memo: "점심·저녁 준비" }));
@@ -1903,7 +1979,25 @@
     "remove-assign": (el) => { state.assigns = state.assigns.filter((a) => a.id !== el.dataset.id); refresh(); },
     "outcome": (el) => { buzz(); setOutcome(assign(el.dataset.id), el.dataset.v); render(); toast(el.dataset.v === "done" ? "출근으로 기록했어요" : "안 나옴으로 기록했어요"); },
     "cancel-ask": (el) => cancelAsk(assign(el.dataset.id)),
-    "undo-assign": (el) => { const a = assign(el.dataset.id); a.status = "confirmed"; a.outcome = ""; a.fee = 0; a.rehire = false; refresh(); toast("확정 상태로 되돌렸어요"); },
+    "undo-assign": (el) => { const a = assign(el.dataset.id); a.status = "confirmed"; a.outcome = ""; a.fee = 0; a.rehire = false; a.paid = false; refresh(); toast("확정 상태로 되돌렸어요"); },
+    // 수수료 받음 표시 / 취소
+    "toggle-paid": (el) => {
+      const a = assign(el.dataset.id);
+      a.paid = !a.paid;
+      a.paidAt = a.paid ? today() : "";
+      refresh();
+      toast(a.paid ? `수수료 ${won(a.fee)} 받음으로 표시했어요` : "받음 표시를 취소했어요");
+    },
+    // 이 사람의 안 받은 수수료를 모두 받음으로
+    "pay-all": (el) => {
+      const list = unpaidList(el.dataset.id);
+      if (!list.length) return;
+      if (list.length > 1 && !confirm(`${list[0].w.name}님 수수료 ${list.length}건, ${won(feeSumOf(list))}을 모두 받음으로 표시할까요?`)) return;
+      list.forEach(({ a }) => { a.paid = true; a.paidAt = today(); });
+      refresh();
+      toast(`${won(feeSumOf(list))} 받음으로 표시했어요`);
+    },
+    "save-account": () => { state.account = $("#fee-account").value.trim(); refresh(); toast(state.account ? "계좌를 저장했어요" : "계좌를 지웠어요"); },
     "toggle-rehire": (el) => { const a = assign(el.dataset.id); a.rehire = !a.rehire; refresh(); },
     "copy-rest-msg": (el) => { const a = assign(el.dataset.id); copyText(restMsg(job(a.jobId), worker(a.workerId))); },
     "show-more": (el) => { ui.showAll[el.dataset.id] = true; render(); },

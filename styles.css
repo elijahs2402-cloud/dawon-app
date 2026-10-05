@@ -512,3 +512,11 @@ body { overflow-x: hidden; }
 .progress span { display: block; height: 100%; border-radius: 99px; background: var(--pri); transition: width .4s var(--ease); }
 .row-state { flex: none; align-self: flex-start; margin-top: 2px; color: var(--pri); font-size: 1rem; font-weight: 800; }
 .row-state.ok { color: var(--ok); }
+
+/* 수수료: 미수·밀림은 주황, 받음은 초록 */
+.overdue { color: var(--warn); font-weight: 700; }
+.overdue .ic { width: 14px; height: 14px; margin-right: 2px; vertical-align: -2px; }
+.paid { color: var(--ok); font-weight: 700; }
+.paid .ic { width: 14px; height: 14px; margin-right: 2px; vertical-align: -2px; }
+.fee-owed .history { margin: 12px 0 0; }
+.month .wide { grid-column: 1 / -1; }
