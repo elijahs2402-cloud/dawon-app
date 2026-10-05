@@ -2,7 +2,7 @@
   "use strict";
 
   // 앱 버전(APP_VERSION): 설정 화면 맨 아래에 표시. sw.js의 CACHE 이름과 같이 올림
-  const APP_VERSION = "v39";
+  const APP_VERSION = "v40";
   // 저장소 이름(KEY): 휴대폰 브라우저 안에 자료를 저장할 때 쓰는 이름
   const KEY = "dawon-mobile-v1";
   // 업무 종류(ROLES)
@@ -336,7 +336,6 @@
     return { level: 1, label: "신규", cls: "new" };
   };
   const badge = (t) => `<span class="badge ${t.cls}">${t.label}</span>`;
-  const statLine = (s) => `<span class="stats">${icon("check")}${s.done}${icon("alert")}${s.late}${icon("x")}${s.noshow}${s.rehire ? `${icon("heart", "fill")}${s.rehire}` : ""}</span>`;
   // 순서 정하기: 믿음직 → 보통 → 주의, 같으면 오래 쉰 사람 먼저
   const byPriority = (x, y) => (x.t.level - y.t.level) || (x.s.lastWork || "").localeCompare(y.s.lastWork || "") || x.w.name.localeCompare(y.w.name, "ko");
   const ranked = (list) => list.map((w) => { const s = statsOf(w.id); return { w, s, t: trustOf(s) }; });
@@ -796,7 +795,7 @@
     return list.length ? list.map(({ w, s, t }) => `<button class="worker-card ${w.active === false ? "hidden-worker" : ""}" data-act="open-worker" data-id="${w.id}"><div class="who">${avatar(w)}<div>
         <div class="name-line"><strong>${esc(w.name)}</strong>${badge(t)}${w.active === false ? `<span class="tag">숨김</span>` : ""}</div>
         <div class="status-line">${(w.roles || []).length ? esc(w.roles.join(" · ")) : `<span class="tag warn">업무 미정</span>`}${w.area ? ` · ${esc(w.area)}` : ""}</div>
-        <div class="status-line muted">${statLine(s)} · ${s.lastWork ? `마지막 근무 ${esc(dateText(s.lastWork))}` : "근무 기록 없음"}</div></div></div></button>`).join("")
+        <div class="status-line muted">${s.lastWork ? `마지막 근무 ${esc(dateText(s.lastWork))}` : "근무 기록 없음"}</div></div></div></button>`).join("")
       : `<div class="empty">${q || ui.peopleRole ? "조건에 맞는 분이 없어요" : "등록된 분이 없어요"}</div>`;
   };
   const renderPeople = () => {
