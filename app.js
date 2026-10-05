@@ -2,7 +2,7 @@
   "use strict";
 
   // 앱 버전(APP_VERSION): 설정 화면 맨 아래에 표시. sw.js의 CACHE 이름과 같이 올림
-  const APP_VERSION = "v47";
+  const APP_VERSION = "v48";
   // 저장소 이름(KEY): 휴대폰 브라우저 안에 자료를 저장할 때 쓰는 이름
   const KEY = "dawon-mobile-v1";
   // 업무 종류(ROLES)
@@ -630,12 +630,44 @@
   // 기간 글: 이어지면 "10/7~10/9 3일 연속", 띄엄띄엄이면 "10/7, 10/9 (2일)"
   const periodText = (g) => (isRun(g) ? `${shortDate(g[0].date)}~${shortDate(g[g.length - 1].date)} ${g.length}일 연속` : `${g.map((x) => shortDate(x.date)).join(", ")} (${g.length}일)`);
 
-  // 근무 날이 지났는데 출근 여부를 아직 안 적은 사람들
-  const pendingChecks = () => state.assigns
-    .filter((a) => a.status === "confirmed" && !a.outcome)
-    .map((a) => ({ a, j: job(a.jobId), w: worker(a.workerId) }))
-    .filter((x) => x.j && x.w && x.j.date <= today())
-    .sort((x, y) => sortJobs(x.j, y.j));
+  // 근무 시간 (시작·끝 시각). 끝이 시작보다 이르면 다음 날 끝나는 밤 근무
+  const shiftOf = (j) => {
+    const s = new Date(`${j.date}T${j.start || "00:00"}:00`);
+    const e = new Date(`${j.date}T${j.end || "00:00"}:00`);
+    if (e <= s) e.setDate(e.getDate() + 1);
+    return { s, e };
+  };
+  // 지금 일하는 중: 확정된 분 중 지금이 근무 시간 안인 사람 (어제 시작한 밤 근무 포함)
+  const workingNow = () => {
+    const now = new Date();
+    return state.assigns
+      .filter((a) => a.status === "confirmed")
+      .map((a) => ({ a, j: job(a.jobId), w: worker(a.workerId) }))
+      .filter((x) => x.j && x.w && (x.j.date === today() || x.j.date === today(-1)))
+      .filter((x) => { const { s, e } = shiftOf(x.j); return now >= s && now < e; })
+      .sort((x, y) => shiftOf(x.j).e - shiftOf(y.j).e); // 곧 끝나는 사람부터
+  };
+  const workRow = ({ j, w }) => {
+    const { s, e } = shiftOf(j);
+    const pct = Math.max(0, Math.min(100, Math.round(((Date.now() - s) / (e - s)) * 100)));
+    const left = Math.max(1, Math.round((e - Date.now()) / 60000));
+    return `<div class="check-row work-row">
+      <div class="who"><button class="avatar-link" data-act="open-worker" data-id="${w.id}" aria-label="${esc(w.name)} 보기">${avatar(w)}</button><div><button class="name-link" data-act="open-worker" data-id="${w.id}">${esc(w.name)}</button>
+      <div class="muted small">${esc(restName(j))} ${esc(j.role)}</div></div></div>
+      <div class="progress" role="progressbar" aria-valuenow="${pct}" aria-valuemin="0" aria-valuemax="100"><span style="width:${pct}%"></span></div>
+      <div class="work-time small"><span>${esc(korTime(j.start))} 시작</span><strong>${esc(hoursText(left))} 남음</strong></div></div>`;
+  };
+
+  // 근무 날이 지났는데 출근 여부를 아직 안 적은 사람들 (지금 일하는 중인 분은 끝난 뒤에)
+  const pendingChecks = () => {
+    const now = new Date();
+    return state.assigns
+      .filter((a) => a.status === "confirmed" && !a.outcome)
+      .map((a) => ({ a, j: job(a.jobId), w: worker(a.workerId) }))
+      .filter((x) => x.j && x.w && x.j.date <= today())
+      .filter((x) => { const { s, e } = shiftOf(x.j); return !(now >= s && now < e); })
+      .sort((x, y) => sortJobs(x.j, y.j));
+  };
 
   const checkRow = ({ a, j, w }) => `<div class="check-row">
       <div class="who"><button class="avatar-link" data-act="open-worker" data-id="${w.id}" aria-label="${esc(w.name)} 보기">${avatar(w)}</button><div><button class="name-link" data-act="open-worker" data-id="${w.id}">${esc(w.name)}</button>
@@ -673,13 +705,14 @@
     const feeSum = doneThisMonth.reduce((sum, a) => sum + (Number(a.fee) || 0), 0);
     const backupDays = state.lastBackup ? daysBetween(state.lastBackup, today()) : null;
 
+    const working = workingNow();
     // 맨 위 큰 요약 (오늘 날짜 + 사람이 필요한 일 건수)
     const now = new Date();
     const todayNeed = needJobs.filter((j) => j.date === today()).length;
     let html = `<section class="hero">
         <p class="hero-date">${now.getMonth() + 1}월 ${now.getDate()}일 ${WEEK[now.getDay()]}요일</p>
         <p class="hero-title">${!hasData ? "반가워요,<br>다원 어머니회예요" : needJobs.length ? `사람이 필요한 일<br><span class="num" data-count="${needJobs.length}" data-suffix="건">${needJobs.length}건</span>` : "빈자리 없이<br>다 채웠어요"}</p>
-        ${hasData && (todayNeed || checks.length) ? `<p class="hero-sub">${[todayNeed ? `오늘 ${todayNeed}건` : "", checks.length ? `출근 체크 ${checks.length}명` : ""].filter(Boolean).join(" · ")}</p>` : ""}
+        ${hasData && (todayNeed || checks.length || working.length) ? `<p class="hero-sub">${[todayNeed ? `오늘 ${todayNeed}건` : "", working.length ? `일하는 중 ${working.length}명` : "", checks.length ? `출근 체크 ${checks.length}명` : ""].filter(Boolean).join(" · ")}</p>` : ""}
       </section>
       <div class="big-actions">
         <button class="btn primary big" data-act="new-job">${icon("plus")}일감 받기</button>
@@ -696,6 +729,10 @@
     }
     html += `<h2>사람이 필요해요 <span class="count">${needJobs.length}</span></h2>`;
     html += needJobs.length ? needJobs.map(jobCard).join("") : `<div class="empty">빈자리가 없어요</div>`;
+    // 지금 일하는 중 (근무 시간이 얼마나 지났는지 막대로)
+    if (working.length) {
+      html += `<h2>지금 일하는 중 <span class="count">${working.length}</span></h2><div class="card">${working.map(workRow).join("")}</div>`;
+    }
     if (checks.length) {
       html += `<h2>출근했는지 체크해 주세요 <span class="count">${checks.length}</span></h2><div class="card">${checks.map(checkRow).join("")}</div>`;
     }
@@ -1030,6 +1067,13 @@
     requestAnimationFrame(step);
   });
   const refresh = () => { save(); render(); };
+  // 홈을 보고 있으면 1분마다 다시 그려서 '일하는 중' 막대가 차오르게 함 (입력창이 열려 있으면 건너뜀)
+  setInterval(() => {
+    if (route.name !== "home" || sheet.open || document.hidden) return;
+    const y = window.scrollY;
+    render();
+    window.scrollTo(0, y);
+  }, 60000);
 
   // ---------- 입력창들 ----------
   const roleChips = (name, selected, multi) => `<div class="chips">${ROLES.map((r) => `<label class="chip"><input type="${multi ? "checkbox" : "radio"}" name="${name}" value="${r}" ${selected.includes(r) ? "checked" : ""} ${multi ? "" : "required"} /><span>${r}</span></label>`).join("")}</div>`;

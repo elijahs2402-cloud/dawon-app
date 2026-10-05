@@ -534,3 +534,7 @@ body { overflow-x: hidden; }
 .plan-row .chips { flex: 1; margin: 0; }
 /* 하루만 고르면 체크표를 숨김 (.field의 display가 hidden을 덮지 않게) */
 .day-plan[hidden] { display: none; }
+/* 지금 일하는 중: 막대 아래 시작 시각 · 남은 시간 */
+.work-row .progress { margin: 14px 0 8px; }
+.work-time { display: flex; justify-content: space-between; color: var(--sub); }
+.work-time strong { color: var(--pri); }
