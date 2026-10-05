@@ -532,3 +532,5 @@ body { overflow-x: hidden; }
 .plan-row:first-child { border-top: 0; }
 .plan-date { flex: none; width: 76px; font-weight: 700; color: var(--ink); }
 .plan-row .chips { flex: 1; margin: 0; }
+/* 하루만 고르면 체크표를 숨김 (.field의 display가 hidden을 덮지 않게) */
+.day-plan[hidden] { display: none; }
