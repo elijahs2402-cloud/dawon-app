@@ -527,3 +527,8 @@ body { overflow-x: hidden; }
 /* 사진을 눌러도 그 사람 화면으로 */
 .avatar-link { flex: none; padding: 0; border: 0; background: none; border-radius: 50%; cursor: pointer; line-height: 0; }
 .avatar-link:active { opacity: .7; }
+/* 날짜별 업무 체크표 */
+.plan-row { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-top: 1px solid var(--line); }
+.plan-row:first-child { border-top: 0; }
+.plan-date { flex: none; width: 76px; font-weight: 700; color: var(--ink); }
+.plan-row .chips { flex: 1; margin: 0; }

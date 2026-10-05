@@ -2,7 +2,7 @@
   "use strict";
 
   // 앱 버전(APP_VERSION): 설정 화면 맨 아래에 표시. sw.js의 CACHE 이름과 같이 올림
-  const APP_VERSION = "v45";
+  const APP_VERSION = "v46";
   // 저장소 이름(KEY): 휴대폰 브라우저 안에 자료를 저장할 때 쓰는 이름
   const KEY = "dawon-mobile-v1";
   // 업무 종류(ROLES)
@@ -394,7 +394,7 @@
     return letter(
       `[다원] ${w.name}님, 일자리 안내드려요.`,
       section("근무", `${dateText(j.date)} ${timeLine(j)}`, `${r?.name || ""}${r?.area ? `(${r.area})` : ""} ${j.role}`),
-      g.length > 1 ? section("기간", `${groupRange(j)} ${g.length}일 연속`) : "",
+      g.length > 1 ? section("기간", periodText(g)) : "",
       section("급여", payText(j)),
       "가능하시면 연락 주세요.",
     );
@@ -615,7 +615,7 @@
     const past = j.date < today();
     const g = groupOf(j);
     return `<button class="job-card ${need ? "need" : "full"} ${past ? "past" : ""}" data-act="open-job" data-id="${j.id}">
-      <div class="job-when">${esc(dateText(j.date))} · ${esc(j.start)}~${esc(j.end)}${g.length > 1 ? ` <span class="pill gray">${g.length}일 연속 · ${g.indexOf(j) + 1}일째</span>` : ""}</div>
+      <div class="job-when">${esc(dateText(j.date))} · ${esc(j.start)}~${esc(j.end)}${g.length > 1 ? ` <span class="pill gray">${g.length}일${isRun(g) ? " 연속" : ""} · ${g.indexOf(j) + 1}일째</span>` : ""}</div>
       <div class="job-what"><strong>${esc(restName(j))}</strong><span class="role">${esc(j.role)}</span></div>
       <div class="job-state">${need ? `<span class="pill need">${need}명 더 필요</span>` : `<span class="pill ok">인원 다 참</span>`}
       <span class="muted">확정 ${conf}/${esc(j.headcount)}명</span></div></button>`;
@@ -625,7 +625,10 @@
   const groupOf = (j) => (j?.group ? state.jobs.filter((x) => x.group === j.group).sort(sortJobs) : [j]);
   // 같은 날 같은 요청(찬모·서빙 함께 부른 것). 아니면 자기 하나
   const reqOf = (j) => (j?.req ? state.jobs.filter((x) => x.req === j.req && x.date === j.date).sort((a, b) => ROLES.indexOf(a.role) - ROLES.indexOf(b.role)) : [j]);
-  const groupRange = (j) => { const g = groupOf(j); return `${dateText(g[0].date).replace(/^(오늘|내일|어제) /, "")}~${dateText(g[g.length - 1].date).replace(/^(오늘|내일|어제) /, "")}`; };
+  // 묶음 날짜가 하루도 빠짐없이 이어지는지 (10/7·10/8·10/9 → 연속, 10/7·10/9 → 띄엄띄엄)
+  const isRun = (g) => g.every((x, i) => i === 0 || daysBetween(g[i - 1].date, x.date) === 1);
+  // 기간 글: 이어지면 "10/7~10/9 3일 연속", 띄엄띄엄이면 "10/7, 10/9 (2일)"
+  const periodText = (g) => (isRun(g) ? `${shortDate(g[0].date)}~${shortDate(g[g.length - 1].date)} ${g.length}일 연속` : `${g.map((x) => shortDate(x.date)).join(", ")} (${g.length}일)`);
 
   // 근무 날이 지났는데 출근 여부를 아직 안 적은 사람들
   const pendingChecks = () => state.assigns
@@ -1107,7 +1110,16 @@
         <div class="role-rows"></div>
         <span class="hint" id="night-hint"></span>
       </fieldset>
+      ${existing ? "" : `<fieldset class="field day-plan" hidden><legend>날마다 필요한 업무</legend>
+        <span class="hint" style="margin:0 0 10px">필요 없는 칸만 눌러서 빼세요</span>
+        <div class="day-plan-rows"></div>
+      </fieldset>`}
       <label class="field">메모<textarea name="memo" rows="2" placeholder="예: 앞치마 지참">${esc(j.memo)}</textarea></label>`;
+    // 날짜별 업무 체크표: "날짜|업무번호" → 체크 여부. 처음엔 모두 체크
+    // (업무 추가에서 넘어온 날짜 묶음이 띄엄띄엄이면, 묶음에 없는 날은 처음부터 빼 둠)
+    const planPick = new Map();
+    const presetDays = preset?.dates?.length > 1 ? new Set(preset.dates) : null;
+    const planOn = (d, i) => (planPick.has(`${d}|${i}`) ? planPick.get(`${d}|${i}`) : !presetDays || presetDays.has(d));
 
     // 날짜 목록: 여러 날이면 시작~끝의 모든 날짜
     const datesOf = (form) => {
@@ -1139,6 +1151,23 @@
           form.elements[wrap.dataset.time].value = h === "" ? "" : `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
           calc();
         }));
+        // 날짜별 업무 체크표: 여러 날 + 업무를 골랐을 때만 보임
+        const planBox = form.querySelector(".day-plan");
+        const syncPlan = () => {
+          if (!planBox) return;
+          const dates = datesOf(form);
+          const picked = [...form.querySelectorAll("input[name=roles]:checked")].map((x) => Number(x.value));
+          planBox.hidden = !(dates.length > 1 && picked.length);
+          if (planBox.hidden) return;
+          planBox.querySelector(".day-plan-rows").innerHTML = dates.map((d) => `<div class="plan-row">
+            <span class="plan-date">${esc(shortDate(d))}</span>
+            <div class="chips">${picked.map((i) => `<label class="chip"><input type="checkbox" data-plan="${d}|${i}" ${planOn(d, i) ? "checked" : ""} /><span>${ROLES[i]}</span></label>`).join("")}</div>
+          </div>`).join("");
+        };
+        planBox?.addEventListener("change", (e) => {
+          const key = e.target.dataset.plan;
+          if (key) planPick.set(key, e.target.checked);
+        });
         // 업무 줄 맞추기: 고른 업무만 줄로 보여줌 (이미 적은 값은 그대로 둠)
         const syncRows = () => {
           const picked = [...form.querySelectorAll("input[name=roles]:checked")].map((x) => Number(x.value));
@@ -1149,6 +1178,7 @@
           // 업무 순서대로 정렬
           [...rowsBox.children].sort((a, b) => a.dataset.i - b.dataset.i).forEach((el) => rowsBox.append(el));
           calc();
+          syncPlan();
         };
         // 업무마다 시급 × 근무시간 = 일당 계산
         const calc = () => {
@@ -1201,7 +1231,8 @@
             form.elements.dateEnd.value = ymd(d);
           }
           const n = datesOf(form).length;
-          $("#days-hint", form).textContent = isMulti ? (n ? `${n}일 연속 · 날짜마다 일감이 하나씩 만들어져요` : "끝 날짜를 시작 날짜 뒤로 골라 주세요") : "";
+          $("#days-hint", form).textContent = isMulti ? (n ? `${n}일 · 날마다 필요한 업무는 아래에서 고를 수 있어요` : "끝 날짜를 시작 날짜 뒤로 골라 주세요") : "";
+          syncPlan();
         };
         form.querySelectorAll("input[name=dateQuick]").forEach((i) => i.addEventListener("change", () => {
           if (i.value !== "multi") form.elements.date.value = i.value;
@@ -1262,12 +1293,16 @@
           toast("고쳤어요");
           return;
         }
-        // 날짜마다 × 업무마다 일감을 만듦
+        // 날짜마다 체크표에서 남겨 둔 업무만 (하루짜리면 고른 업무 모두)
+        const plan = dates
+          .map((date) => ({ date, roles: perRole.filter((p, k) => dates.length < 2 || planOn(date, roleIdx[k])) }))
+          .filter((x) => x.roles.length);
+        if (!plan.length) { toast("날마다 필요한 업무를 하나 이상 남겨 주세요"); form.querySelector(".day-plan")?.scrollIntoView({ block: "center" }); return false; }
         // group: 같은 업무의 여러 날 묶음 / req: 같은 날 같은 요청(찬모·서빙 함께)
-        const groups = Object.fromEntries(perRole.map((p) => [p.role, dates.length > 1 ? uid() : ""]));
-        const reqs = Object.fromEntries(dates.map((d) => [d, preset?.reqByDate?.[d] || (perRole.length > 1 ? uid() : "")]));
+        const groups = Object.fromEntries(perRole.map((p) => [p.role, plan.filter((x) => x.roles.includes(p)).length > 1 ? uid() : ""]));
+        const reqs = Object.fromEntries(plan.map((x) => [x.date, preset?.reqByDate?.[x.date] || (x.roles.length > 1 ? uid() : "")]));
         const made = [];
-        dates.forEach((date) => perRole.forEach((p) => {
+        plan.forEach(({ date, roles }) => roles.forEach((p) => {
           made.push({ id: uid(), ...common, ...p, date, ...(groups[p.role] ? { group: groups[p.role] } : {}), ...(reqs[date] ? { req: reqs[date] } : {}), created: today() });
         }));
         state.jobs.push(...made);
@@ -1275,7 +1310,7 @@
         // '같은 식당·날짜로 업무 추가'(일감 보기에서 만듦)는 쌓지 않고 바꿔치기 → 뒤로가기 한 번에 목록으로
         go({ name: "job", id: made[0].id }, { replace: Boolean(preset) && route.name === "job" });
         const roleText = perRole.map((p) => `${p.role} ${p.headcount}명`).join("·");
-        toast(made.length > 1 ? `${dates.length > 1 ? `${dates.length}일 × ` : ""}${roleText} 일감을 만들었어요` : "일감을 저장했어요. 추천 순서대로 연락해 보세요.");
+        toast(made.length > 1 ? (plan.length > 1 ? `${plan.length}일 동안 일감 ${made.length}개를 만들었어요` : `${roleText} 일감을 만들었어요`) : "일감을 저장했어요. 추천 순서대로 연락해 보세요.");
       },
     });
   };
@@ -1698,7 +1733,7 @@
     const short = (x) => dateText(x.date).replace(/^(오늘|내일|어제) /, "");
     openSheet({
       title: `${w.name}님 확정`,
-      body: `<p>${groupOf(j).length}일 연속 일감이에요. 어떻게 확정할까요?</p><div class="choice-list">
+      body: `<p>${groupOf(j).length}일${isRun(groupOf(j)) ? " 연속" : "짜리"} 일감이에요. 어떻게 확정할까요?</p><div class="choice-list">
         <label class="choice"><input type="radio" name="scope" value="all" checked /><span><strong>남은 날 모두 확정</strong><small>${[j, ...later].map(short).join(", ")} (${later.length + 1}일)</small></span></label>
         <label class="choice"><input type="radio" name="scope" value="one" /><span><strong>이 날만 확정</strong><small>${short(j)}</small></span></label></div>`,
       submit: "확정",
@@ -1924,12 +1959,24 @@
     "add-role": (el) => {
       const j = job(el.dataset.id);
       if (!j) return;
-      // 여러 날 묶음이면 그 묶음의 모든 날짜로, 날마다 같은 요청 번호를 붙여 둠
+      // 고른 날짜들에 같은 요청 번호를 붙이고 업무 추가 창을 엶
+      const openFor = (days) => {
+        const reqByDate = {};
+        days.forEach((x) => { if (!x.req) x.req = uid(); reqByDate[x.date] = x.req; });
+        save();
+        jobForm(null, { restaurantId: j.restaurantId, dates: days.map((x) => x.date), start: j.start, end: j.end, breakMin: j.breakMin, reqByDate });
+      };
       const days = groupOf(j);
-      const reqByDate = {};
-      days.forEach((x) => { if (!x.req) x.req = uid(); reqByDate[x.date] = x.req; });
-      save();
-      jobForm(null, { restaurantId: j.restaurantId, dates: days.map((x) => x.date), start: j.start, end: j.end, breakMin: j.breakMin, reqByDate });
+      if (days.length < 2) { openFor([j]); return; }
+      // 여러 날 일감이면 먼저 "이 날만 / 모든 날"을 물어봄
+      openSheet({
+        title: "업무 추가",
+        body: `<p>어느 날에 업무를 더할까요?</p><div class="choice-list">
+          <label class="choice"><input type="radio" name="scope" value="one" checked /><span><strong>이 날만</strong><small>${esc(shortDate(j.date))}</small></span></label>
+          <label class="choice"><input type="radio" name="scope" value="all" /><span><strong>모든 날</strong><small>${days.map((x) => esc(shortDate(x.date))).join(", ")} (${days.length}일)</small></span></label></div>`,
+        submit: "다음",
+        onSubmit: (fd) => { openFor(val(fd, "scope") === "all" ? days : [j]); return false; },
+      });
     },
     "edit-job": (el) => jobForm(job(el.dataset.id)),
     "open-job": (el) => {
