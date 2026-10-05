@@ -2,7 +2,7 @@
   "use strict";
 
   // 앱 버전(APP_VERSION): 설정 화면 맨 아래에 표시. sw.js의 CACHE 이름과 같이 올림
-  const APP_VERSION = "v41";
+  const APP_VERSION = "v42";
   // 저장소 이름(KEY): 휴대폰 브라우저 안에 자료를 저장할 때 쓰는 이름
   const KEY = "dawon-mobile-v1";
   // 업무 종류(ROLES)
@@ -335,18 +335,23 @@
       lastWork: rows.find((r) => r.a.outcome === "done")?.j.date || "",
     };
   };
-  // trustOf: 기록을 보고 "믿음직 / 보통 / 신규 / 주의"로 나눔
-  const trustOf = (s) => {
+  // autoTrust: 기록을 보고 "믿음직 / 보통 / 신규 / 주의"로 나눔
+  const autoTrust = (s) => {
     if (s.recentNoshow >= 2 || s.recentMiss >= 3) return { level: 2, label: "주의", cls: "bad" };
     if (s.recentMiss >= 1) return { level: 1, label: "보통", cls: "mid" };
     if (s.done >= 3) return { level: 0, label: "믿음직", cls: "good" };
     if (s.done >= 1) return { level: 1, label: "보통", cls: "mid" };
     return { level: 1, label: "신규", cls: "new" };
   };
+  // 엄마가 직접 고른 표시 (w.trust: good·mid·bad). 고르지 않았으면 기록으로 자동
+  const MANUAL_TRUST = { good: { level: 0, label: "믿음직", cls: "good" }, mid: { level: 1, label: "보통", cls: "mid" }, bad: { level: 2, label: "주의", cls: "bad" } };
+  // 마지막 글자에 받침이 있는지 (으로/로, 이에요/예요 고르기)
+  const hasBatchim = (word) => { const c = word.charCodeAt(word.length - 1) - 0xac00; return c >= 0 && c <= 11171 && c % 28 !== 0; };
+  const trustOf = (s, w) => (w?.trust && MANUAL_TRUST[w.trust] ? { ...MANUAL_TRUST[w.trust], manual: true } : autoTrust(s));
   const badge = (t) => `<span class="badge ${t.cls}">${t.label}</span>`;
   // 순서 정하기: 믿음직 → 보통 → 주의, 같으면 오래 쉰 사람 먼저
   const byPriority = (x, y) => (x.t.level - y.t.level) || (x.s.lastWork || "").localeCompare(y.s.lastWork || "") || x.w.name.localeCompare(y.w.name, "ko");
-  const ranked = (list) => list.map((w) => { const s = statsOf(w.id); return { w, s, t: trustOf(s) }; });
+  const ranked = (list) => list.map((w) => { const s = statsOf(w.id); return { w, s, t: trustOf(s, w) }; });
 
   // 같은 날 시간이 겹치는 확정 근무가 있는지
   const overlaps = (a, b) => a.date === b.date && (!a.start || !a.end || !b.start || !b.end || (a.start < b.end && b.start < a.end));
@@ -732,7 +737,7 @@
     const w = worker(a.workerId);
     if (!w) return "";
     const s = statsOf(w.id);
-    const head = `<div class="name-line"><button class="name-link" data-act="open-worker" data-id="${w.id}">${esc(w.name)}</button>${badge(trustOf(s))}</div>`;
+    const head = `<div class="name-line"><button class="name-link" data-act="open-worker" data-id="${w.id}">${esc(w.name)}</button>${badge(trustOf(s, w))}</div>`;
     let state_ = "";
     let buttons = "";
     let side = ""; // 이름 줄 오른쪽 상태 글자 (토스식: 확정=파랑, 출근함=초록)
@@ -877,7 +882,7 @@
     const w = worker(id);
     if (!w) return `<div class="empty">찾을 수 없어요.</div>`;
     const s = statsOf(w.id);
-    const t = trustOf(s);
+    const t = trustOf(s, w);
     const rows = state.assigns.filter((a) => a.workerId === w.id).map((a) => ({ a, j: job(a.jobId) })).filter((x) => x.j)
       .sort((x, y) => y.j.date.localeCompare(x.j.date));
     const upcoming = rows.filter((x) => x.j.date >= today() && x.a.status === "confirmed" && !x.a.outcome).reverse();
@@ -901,6 +906,11 @@
       <div class="btn-row">${w.phone ? `<a class="btn primary" href="${telHref(w.phone)}">${icon("phone")}전화</a><a class="btn" href="${smsHref(w.phone, "")}">${icon("message")}문자</a>` : ""}<button class="btn" data-act="edit-worker" data-id="${w.id}">${icon("edit")}고치기</button></div>
     </div>
     ${owedCard}
+    <h2>신뢰 표시</h2>
+    <div class="card trust-card">
+      <div class="segment seg4">${[["", "자동"], ["good", "믿음직"], ["mid", "보통"], ["bad", "주의"]].map(([v, label]) => `<button class="${(w.trust || "") === v ? "active" : ""}" data-act="set-trust" data-id="${w.id}" data-v="${v}">${label}</button>`).join("")}</div>
+      <p class="hint" style="margin:0">${w.trust ? `엄마가 직접 정했어요. 추천 순서도 이 표시를 따라요. (기록으로 보면 '${autoTrust(s).label}')` : `출근·취소 기록을 보고 앱이 정해요. 지금은 '${autoTrust(s).label}'${hasBatchim(autoTrust(s).label) ? "이에요" : "예요"}.`}</p>
+    </div>
     <h2>약속 기록</h2>
     <div class="stat-grid"><div><strong>${s.done}</strong><small>${icon("check")}출근</small></div><div><strong>${s.late}</strong><small>${icon("alert")}직전취소</small></div><div><strong>${s.noshow}</strong><small>${icon("x")}안 나옴</small></div><div><strong>${s.rehire}</strong><small>${icon("heart", "fill")}또 찾음</small></div></div>
     ${ranks.length ? `<div class="card"><p style="margin:0"><strong>지금 추천 순서</strong></p>${ranks.map((r) => `<p class="small" style="margin:4px 0 0">${esc(r.role)}: ${r.total}명 중 <strong>${r.pos}번째</strong></p>`).join("")}<p class="hint">약속 잘 지키고 오래 쉰 분이 앞 순서예요. 재촉 전화가 오면 참고하세요.</p></div>` : ""}
@@ -1996,6 +2006,13 @@
       list.forEach(({ a }) => { a.paid = true; a.paidAt = today(); });
       refresh();
       toast(`${won(feeSumOf(list))} 받음으로 표시했어요`);
+    },
+    // 신뢰 표시 직접 고르기 ("" = 자동)
+    "set-trust": (el) => {
+      const w = worker(el.dataset.id);
+      w.trust = el.dataset.v;
+      refresh();
+      toast(w.trust ? `'${MANUAL_TRUST[w.trust].label}'${hasBatchim(MANUAL_TRUST[w.trust].label) ? "으로" : "로"} 정했어요` : "기록을 보고 자동으로 정해요");
     },
     "save-account": () => { state.account = $("#fee-account").value.trim(); refresh(); toast(state.account ? "계좌를 저장했어요" : "계좌를 지웠어요"); },
     "toggle-rehire": (el) => { const a = assign(el.dataset.id); a.rehire = !a.rehire; refresh(); },

@@ -520,3 +520,5 @@ body { overflow-x: hidden; }
 .paid .ic { width: 14px; height: 14px; margin-right: 2px; vertical-align: -2px; }
 .fee-owed .history { margin: 12px 0 0; }
 .month .wide { grid-column: 1 / -1; }
+/* 신뢰 표시 직접 고르기: 4칸 */
+.segment.seg4 { grid-template-columns: repeat(4, 1fr); margin-bottom: 12px; }
