@@ -2,7 +2,7 @@
   "use strict";
 
   // 앱 버전(APP_VERSION): 설정 화면 맨 아래에 표시. sw.js의 CACHE 이름과 같이 올림
-  const APP_VERSION = "v42";
+  const APP_VERSION = "v43";
   // 저장소 이름(KEY): 휴대폰 브라우저 안에 자료를 저장할 때 쓰는 이름
   const KEY = "dawon-mobile-v1";
   // 업무 종류(ROLES)
@@ -907,7 +907,7 @@
     </div>
     ${owedCard}
     <h2>신뢰 표시</h2>
-    <div class="card trust-card">
+    <div class="trust-card">
       <div class="segment seg4">${[["", "자동"], ["good", "믿음직"], ["mid", "보통"], ["bad", "주의"]].map(([v, label]) => `<button class="${(w.trust || "") === v ? "active" : ""}" data-act="set-trust" data-id="${w.id}" data-v="${v}">${label}</button>`).join("")}</div>
       <p class="hint" style="margin:0">${w.trust ? `엄마가 직접 정했어요. 추천 순서도 이 표시를 따라요. (기록으로 보면 '${autoTrust(s).label}')` : `출근·취소 기록을 보고 앱이 정해요. 지금은 '${autoTrust(s).label}'${hasBatchim(autoTrust(s).label) ? "이에요" : "예요"}.`}</p>
     </div>

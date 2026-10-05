@@ -522,3 +522,5 @@ body { overflow-x: hidden; }
 .month .wide { grid-column: 1 / -1; }
 /* 신뢰 표시 직접 고르기: 4칸 */
 .segment.seg4 { grid-template-columns: repeat(4, 1fr); margin-bottom: 12px; }
+/* 신뢰 표시: 흰 상자 없이 바탕 위에 바로 */
+.trust-card .hint { margin: 0 4px; }
