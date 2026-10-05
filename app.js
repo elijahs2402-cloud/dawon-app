@@ -2,7 +2,7 @@
   "use strict";
 
   // 앱 버전(APP_VERSION): 설정 화면 맨 아래에 표시. sw.js의 CACHE 이름과 같이 올림
-  const APP_VERSION = "v44";
+  const APP_VERSION = "v45";
   // 저장소 이름(KEY): 휴대폰 브라우저 안에 자료를 저장할 때 쓰는 이름
   const KEY = "dawon-mobile-v1";
   // 업무 종류(ROLES)
@@ -771,13 +771,13 @@
       state_ = `<span class="pill gray">${outcomeText[a.outcome] || "취소"}</span>`;
       buttons = `<button class="btn ghost" data-act="undo-assign" data-id="${a.id}">되돌리기</button>`;
     }
-    return `<div class="person-row ${a.status === "canceled" ? "dim" : ""}"><div class="who">${avatar(w)}<div>${head}${state_ ? `<div class="status-line">${state_}</div>` : ""}</div>${side}</div><div class="btn-row">${buttons}</div></div>`;
+    return `<div class="person-row ${a.status === "canceled" ? "dim" : ""}"><div class="who"><button class="avatar-link" data-act="open-worker" data-id="${w.id}" aria-label="${esc(w.name)} 보기">${avatar(w)}</button><div>${head}${state_ ? `<div class="status-line">${state_}</div>` : ""}</div>${side}</div><div class="btn-row">${buttons}</div></div>`;
   };
 
   const candidateRow = (c, j, full) => {
     const { w, t, near, busy } = c;
     return `<div class="person-row">
-      <div class="who">${avatar(w)}<div>
+      <div class="who"><button class="avatar-link" data-act="open-worker" data-id="${w.id}" aria-label="${esc(w.name)} 보기">${avatar(w)}</button><div>
       <div class="name-line"><button class="name-link" data-act="open-worker" data-id="${w.id}">${esc(w.name)}</button>${badge(t)}${near ? `<span class="tag">가까움</span>` : ""}${busy ? `<span class="tag warn">같은 시간 다른 일</span>` : ""}</div></div></div>
       <div class="btn-row">${contactButtons(w, j, offerMsg(j, w), icon("message") + "일 제안")}
         <button class="btn primary" data-act="add-assign" data-v="confirmed" data-worker="${w.id}" data-job="${j.id}" ${full || busy ? "disabled" : ""}>${icon("check")}확정</button>
