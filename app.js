@@ -2,7 +2,7 @@
   "use strict";
 
   // 앱 버전(APP_VERSION): 설정 화면 맨 아래에 표시. sw.js의 CACHE 이름과 같이 올림
-  const APP_VERSION = "v49";
+  const APP_VERSION = "v50";
   // 저장소 이름(KEY): 휴대폰 브라우저 안에 자료를 저장할 때 쓰는 이름
   const KEY = "dawon-mobile-v1";
   // 업무 종류(ROLES)
@@ -935,7 +935,7 @@
     // 이 분의 받을 수수료
     const owed = unpaidList(w.id);
     const owedCard = owed.length ? `<div class="card fee-owed">
-      <div class="progress-head"><strong>받을 수수료 ${won(feeSumOf(owed))}</strong><span class="${daysBetween(owed[0].j.date, today()) > 0 ? "overdue" : "muted"}">${owed.length}건 · ${overdueText(owed[0].j)}</span></div>
+      <div class="progress-head"><strong>받을 수수료 ${won(feeSumOf(owed))}</strong><span class="muted">${owed.length}건</span></div>
       <ul class="history">${owed.map(({ a, j }) => `<li>${esc(shortDate(j.date))} ${esc(restName(j))} ${esc(j.role)} · <strong>${won(a.fee)}</strong> <span class="small ${daysBetween(j.date, today()) > 0 ? "overdue" : "muted"}">${overdueText(j)}</span></li>`).join("")}</ul>
       <div class="btn-row">${w.phone ? `<a class="btn" href="${smsHref(w.phone, feeMsg(w, owed))}">${icon("message")}수수료 안내</a>` : ""}<button class="btn" data-act="pay-all" data-id="${w.id}">${icon("check")}${owed.length > 1 ? "모두 받음" : "받음"}</button></div></div>` : "";
 

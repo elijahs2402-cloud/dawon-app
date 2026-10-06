@@ -538,3 +538,5 @@ body { overflow-x: hidden; }
 .work-row .progress { margin: 14px 0 8px; }
 .work-time { display: flex; justify-content: space-between; color: var(--sub); }
 .work-time strong { color: var(--pri); }
+/* '3일 지남'이 두 줄로 끊기지 않게 */
+.fee-owed .history .overdue { white-space: nowrap; }
