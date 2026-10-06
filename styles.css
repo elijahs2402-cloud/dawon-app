@@ -594,3 +594,9 @@ button, a.btn, .chip, .tabbar button, .menu-row, .job-card, .worker-card, .segme
 .tabbar button.active svg .cut { stroke: #fff; }
 /* 선 아이콘 모양·굵기는 그대로 두고 속만 채움. 설정 가운데 구멍은 선 아이콘의 안쪽 구멍과 같은 크기 */
 .tabbar button.active svg .hole { fill: #fff; } /* 선 그대로 두고 안쪽만 흰색 → 구멍 크기가 선 아이콘과 같음 */
+/* 선택됐을 때만 쓰는 모양(fl)과 선택 안 됐을 때만 쓰는 모양(ol) */
+.tabbar svg .fl { display: none; }
+.tabbar button.active svg .fl { display: inline; }
+.tabbar button.active svg .ol { display: none; }
+.tabbar button.active svg path.fl { fill: currentColor; }   /* 홈: 문을 넓힌 채움 모양 */
+.tabbar button.active svg .hole-big { fill: #fff; stroke: none; }   /* 설정: 큰 흰 원 */
