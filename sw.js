@@ -1,6 +1,6 @@
 // 서비스 워커(service worker): 인터넷이 없어도 앱 화면이 열리도록 파일을 저장해 두는 역할
 // 앱 파일을 고치면 아래 버전(CACHE) 이름과 app.js의 APP_VERSION을 함께 올려야 함
-const CACHE = "dawon-v61";
+const CACHE = "dawon-v62";
 const FONT_CACHE = "dawon-font-1"; // 글꼴은 앱 버전과 따로 보관 (버전 올려도 다시 안 받음)
 const FILES = ["./", "./index.html", "./styles.css", "./app.js", "./manifest.webmanifest", "./icon-192.png", "./icon-512.png"];
 
