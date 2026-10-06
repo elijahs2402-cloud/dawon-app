@@ -2,7 +2,7 @@
   "use strict";
 
   // 앱 버전(APP_VERSION): 설정 화면 맨 아래에 표시. sw.js의 CACHE 이름과 같이 올림
-  const APP_VERSION = "v48";
+  const APP_VERSION = "v49";
   // 저장소 이름(KEY): 휴대폰 브라우저 안에 자료를 저장할 때 쓰는 이름
   const KEY = "dawon-mobile-v1";
   // 업무 종류(ROLES)
@@ -647,16 +647,18 @@
       .filter((x) => { const { s, e } = shiftOf(x.j); return now >= s && now < e; })
       .sort((x, y) => shiftOf(x.j).e - shiftOf(y.j).e); // 곧 끝나는 사람부터
   };
-  const workRow = ({ j, w }) => {
+  // 근무 진행 막대 + "오전 9시 시작 · 3시간 남음" (홈과 사람 화면에서 같이 씀)
+  const workBar = (j) => {
     const { s, e } = shiftOf(j);
     const pct = Math.max(0, Math.min(100, Math.round(((Date.now() - s) / (e - s)) * 100)));
     const left = Math.max(1, Math.round((e - Date.now()) / 60000));
-    return `<div class="check-row work-row">
+    return `<div class="progress" role="progressbar" aria-valuenow="${pct}" aria-valuemin="0" aria-valuemax="100"><span style="width:${pct}%"></span></div>
+      <div class="work-time small"><span>${esc(korTime(j.start))} 시작</span><strong>${esc(hoursText(left))} 남음</strong></div>`;
+  };
+  const workRow = ({ j, w }) => `<div class="check-row work-row">
       <div class="who"><button class="avatar-link" data-act="open-worker" data-id="${w.id}" aria-label="${esc(w.name)} 보기">${avatar(w)}</button><div><button class="name-link" data-act="open-worker" data-id="${w.id}">${esc(w.name)}</button>
       <div class="muted small">${esc(restName(j))} ${esc(j.role)}</div></div></div>
-      <div class="progress" role="progressbar" aria-valuenow="${pct}" aria-valuemin="0" aria-valuemax="100"><span style="width:${pct}%"></span></div>
-      <div class="work-time small"><span>${esc(korTime(j.start))} 시작</span><strong>${esc(hoursText(left))} 남음</strong></div></div>`;
-  };
+      ${workBar(j)}</div>`;
 
   // 근무 날이 지났는데 출근 여부를 아직 안 적은 사람들 (지금 일하는 중인 분은 끝난 뒤에)
   const pendingChecks = () => {
@@ -945,6 +947,9 @@
       ${w.memo ? `<p class="meta-line" style="margin-top:8px">${icon("note")}${esc(w.memo)}</p>` : ""}
       <div class="btn-row">${w.phone ? `<a class="btn primary" href="${telHref(w.phone)}">${icon("phone")}전화</a><a class="btn" href="${smsHref(w.phone, "")}">${icon("message")}문자</a>` : ""}<button class="btn" data-act="edit-worker" data-id="${w.id}">${icon("edit")}고치기</button></div>
     </div>
+    ${workingNow().filter((x) => x.w.id === w.id).map(({ j }) => `<div class="card work-row work-card">
+      <div class="progress-head"><strong>지금 일하는 중</strong><button class="name-link small" data-act="open-job" data-id="${j.id}">${esc(restName(j))} ${esc(j.role)}</button></div>
+      ${workBar(j)}</div>`).join("")}
     ${owedCard}
     <h2>신뢰 표시</h2>
     <div class="trust-card">
@@ -1067,9 +1072,9 @@
     requestAnimationFrame(step);
   });
   const refresh = () => { save(); render(); };
-  // 홈을 보고 있으면 1분마다 다시 그려서 '일하는 중' 막대가 차오르게 함 (입력창이 열려 있으면 건너뜀)
+  // 홈·사람 화면을 보고 있으면 1분마다 다시 그려서 '일하는 중' 막대가 차오르게 함 (입력창이 열려 있으면 건너뜀)
   setInterval(() => {
-    if (route.name !== "home" || sheet.open || document.hidden) return;
+    if (!["home", "worker"].includes(route.name) || sheet.open || document.hidden) return;
     const y = window.scrollY;
     render();
     window.scrollTo(0, y);
