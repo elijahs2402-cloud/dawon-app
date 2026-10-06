@@ -593,3 +593,10 @@ button, a.btn, .chip, .tabbar button, .menu-row, .job-card, .worker-card, .segme
 .tabbar button.active svg .fp { fill: currentColor; }
 .tabbar button.active svg .cut { stroke: #fff; }
 .tabbar button.active svg .hole { fill: #fff; stroke: #fff; }
+/* 채움 전용 모양(fl)은 선택됐을 때만, 선 모양(ol)은 선택 안 됐을 때만 */
+.tabbar svg .fl { display: none; }
+.tabbar button.active svg .fl { display: inline; }
+.tabbar button.active svg .ol { display: none; }
+/* 설정 톱니: 채울 때 테두리를 얇게 해서 톱니 모양·크기를 선 아이콘과 맞춤, 가운데 구멍은 작게 */
+.tabbar button.active svg .gear { stroke-width: 1.5; }
+.tabbar button.active svg .hole { stroke: none; }
