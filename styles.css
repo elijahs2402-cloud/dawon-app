@@ -587,3 +587,9 @@ button, a.btn, .chip, .tabbar button, .menu-row, .job-card, .worker-card, .segme
 /* 아래에서 올라오는 창 안을 끝까지 스크롤해도 뒤 화면이 같이 밀리지 않게 */
 .sheet-body, .place-list, .addr-body { overscroll-behavior: contain; }
 .ask-btns .btn { padding: 0 10px; white-space: nowrap; }
+
+/* 하단 메뉴: 선택된 칸은 꽉 찬 아이콘 (토스식), 나머지는 선 아이콘 */
+.tabbar svg .fp, .tabbar svg .hole { transition: fill .15s; }
+.tabbar button.active svg .fp { fill: currentColor; }
+.tabbar button.active svg .cut { stroke: #fff; }
+.tabbar button.active svg .hole { fill: #fff; stroke: #fff; }
