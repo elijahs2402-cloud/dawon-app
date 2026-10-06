@@ -2,7 +2,7 @@
   "use strict";
 
   // 앱 버전(APP_VERSION): 설정 화면 맨 아래에 표시. sw.js의 CACHE 이름과 같이 올림
-  const APP_VERSION = "v55";
+  const APP_VERSION = "v56";
   // 저장소 이름(KEY): 휴대폰 브라우저 안에 자료를 저장할 때 쓰는 이름
   const KEY = "dawon-mobile-v1";
   // 업무 종류(ROLES)
@@ -2208,7 +2208,9 @@
             const diffText = diff ? ` (약속보다 ${hoursText(Math.abs(diff))} ${diff > 0 ? "더" : "덜"})` : "";
             if (!j.hourly) { box.innerHTML = `근무 ${hoursText(min)}${diffText} · 시급이 없어서 일당은 그대로예요`; return; }
             const pay = payBreakdown(start, end, j.breakMin, j.hourly, j.nightHourly || 0).pay;
-            const gap = pay - (Number(j.pay) || 0);
+            // 비교 기준: 저장된 일당이 아니라 '약속 시간 × 시급'으로 다시 계산한 값 (시간을 안 바꾸면 차이 0)
+            const base = payBreakdown(j.start, j.end, j.breakMin, j.hourly, j.nightHourly || 0).pay;
+            const gap = pay - base;
             box.innerHTML = `${won(j.hourly)} × ${hoursText(min)}${diffText}<br><strong>일당 ${won(pay)}</strong>${gap ? ` · 약속보다 ${gap > 0 ? "+" : "−"}${won(Math.abs(gap))}` : ""}`;
           };
           // 시·분을 고르면 숨은 칸에 "HH:MM"으로 넣음
