@@ -2,7 +2,7 @@
   "use strict";
 
   // 앱 버전(APP_VERSION): 설정 화면 맨 아래에 표시. sw.js의 CACHE 이름과 같이 올림
-  const APP_VERSION = "v54";
+  const APP_VERSION = "v55";
   // 저장소 이름(KEY): 휴대폰 브라우저 안에 자료를 저장할 때 쓰는 이름
   const KEY = "dawon-mobile-v1";
   // 업무 종류(ROLES)
@@ -501,6 +501,21 @@
     toast("복사했어요. 원하는 곳에 붙여넣으세요.");
   };
 
+  // ---------- 앱 스타일 확인 창 ----------
+  // 브라우저 기본 확인 창(주소가 붙고 버튼이 '확인/취소'뿐) 대신, 버튼에 하는 일 이름을 붙인 창
+  // 사용: if (!(await ask({ title, text, ok: "지우기", danger: true }))) return;
+  const askBox = document.createElement("dialog");
+  askBox.className = "ask";
+  document.body.append(askBox);
+  const ask = ({ title, text = "", ok = "확인", cancel = "그대로 두기", danger = false }) => new Promise((resolve) => {
+    askBox.innerHTML = `<div class="ask-card"><h3>${esc(title)}</h3>${text ? `<p>${esc(text).replace(/\n/g, "<br>")}</p>` : ""}
+      <div class="ask-btns"><button type="button" class="btn" data-ask="0">${esc(cancel)}</button><button type="button" class="btn ${danger ? "danger" : "primary"}" data-ask="1">${esc(ok)}</button></div></div>`;
+    const done = (v) => { askBox.onclick = null; askBox.oncancel = null; askBox.close(); resolve(v); };
+    askBox.onclick = (e) => { const b = e.target.closest("[data-ask]"); if (b) done(b.dataset.ask === "1"); else if (e.target === askBox) done(false); };
+    askBox.oncancel = (e) => { e.preventDefault(); done(false); };
+    askBox.showModal();
+  });
+
   // ---------- 아래에서 올라오는 입력창(시트) ----------
   const sheet = $("#sheet");
   const sheetForm = $("#sheet-form");
@@ -554,7 +569,7 @@
   // navDir: 화면 움직임 방향 (forward = 오른쪽에서 들어옴, back = 왼쪽에서, tab = 아래에서 차례로). 처음 열 때는 tab
   let navDir = "tab";
   const isDetail = (r) => r.name === "job" || r.name === "worker";
-  const ui = { peopleMode: "workers", peopleQuery: "", peopleRole: "", jobsMode: "upcoming", showAll: {} };
+  const ui = { peopleMode: "workers", peopleQuery: "", peopleRole: "", jobsMode: "upcoming", showAll: {}, showAllNeed: false };
   // 뒤로가기 기록 규칙 (토스 방식)
   // - 홈이 맨 아래(depth 0), 하단 탭 화면은 그 바로 위(depth 1) 한 칸만 씀 → 휴대폰 뒤로가기: 탭 → 홈 → 앱 나가기
   // - 일감 보기·사람 보기는 그 위로 한 칸씩 쌓임
@@ -678,12 +693,15 @@
       <div class="muted small">${esc(restName(j))} ${esc(j.role)}</div></div></div>
       ${workBar(j)}</div>`;
 
-  // 근무 날이 됐는데 출근 여부를 아직 안 적은 사람들 (출근함을 누르면 '지금 일하는 중'으로 옮겨감)
-  const pendingChecks = () => state.assigns
-    .filter((a) => a.status === "confirmed" && !a.outcome)
-    .map((a) => ({ a, j: job(a.jobId), w: worker(a.workerId) }))
-    .filter((x) => x.j && x.w && x.j.date <= today())
-    .sort((x, y) => sortJobs(x.j, y.j));
+  // 근무 시작 시각이 지났는데 출근 여부를 아직 안 적은 사람들 (출근함을 누르면 '지금 일하는 중'으로 옮겨감)
+  const pendingChecks = () => {
+    const now = new Date();
+    return state.assigns
+      .filter((a) => a.status === "confirmed" && !a.outcome)
+      .map((a) => ({ a, j: job(a.jobId), w: worker(a.workerId) }))
+      .filter((x) => x.j && x.w && x.j.date <= today() && shiftOf(x.j).s <= now)
+      .sort((x, y) => sortJobs(x.j, y.j));
+  };
 
   const checkRow = ({ a, j, w }) => `<div class="check-row">
       <div class="who"><button class="avatar-link" data-act="open-worker" data-id="${w.id}" aria-label="${esc(w.name)} 보기">${avatar(w)}</button><div><button class="name-link" data-act="open-worker" data-id="${w.id}">${esc(w.name)}</button>
@@ -736,22 +754,26 @@
       </div>`;
 
     if (!hasData) {
-      html += `<h2>처음 오셨네요</h2><div class="card"><p>1. <strong>사람 등록</strong>으로 구직자를 적어 주세요.</p><p>2. 식당에서 전화가 오면 <strong>일감 받기</strong>를 누르세요.</p><p>3. 일감 화면에서 추천 순서대로 연락하고 <strong>확정</strong>을 누르면 끝이에요.</p>
+      html += `<h2>처음 오셨네요</h2><div class="card"><p>1. <strong>사람 등록</strong>으로 일할 분을 적어 주세요.</p><p>2. 식당에서 전화가 오면 <strong>일감 받기</strong>를 누르세요.</p><p>3. 일감 화면에서 추천 순서대로 연락하고 <strong>확정</strong>을 누르면 끝이에요.</p>
         <p class="muted small">먼저 연습해 보고 싶으면 아래 '설정' 메뉴에서 연습용 예시 자료를 넣을 수 있어요.</p></div>`;
       return html;
     }
+    // 백업 안내: 한 줄로 작게
     if (backupDays === null || backupDays >= 7) {
-      html += `<div class="banner warn" style="margin-top:14px">${icon("download")}${backupDays === null ? "아직 백업을 한 번도 안 했어요." : `마지막 백업이 ${backupDays}일 전이에요.`}<br>휴대폰을 잃어버려도 괜찮도록 백업해 두세요.<button class="btn" data-act="backup">지금 백업하기</button></div>`;
+      html += `<button class="backup-line" data-act="backup">${icon("download")}<span>${backupDays === null ? "아직 백업을 안 했어요" : `백업한 지 ${backupDays}일 지났어요`}</span><strong>백업하기</strong></button>`;
     }
-    html += `<h2>사람이 필요해요 <span class="count">${needJobs.length}</span></h2>`;
-    html += needJobs.length ? needJobs.map(jobCard).join("") : `<div class="empty">빈자리가 없어요</div>`;
-    // 지금 일하는 중 (근무 시간이 얼마나 지났는지 막대로)
-    if (working.length) {
-      html += `<h2>지금 일하는 중 <span class="count">${working.length}</span></h2><div class="card">${working.map(workRow).join("")}</div>`;
-    }
+    // 지금 바로 처리할 것부터: 출근 체크 → 일하는 중
     if (checks.length) {
       html += `<h2>출근했는지 체크해 주세요 <span class="count">${checks.length}</span></h2><div class="card">${checks.map(checkRow).join("")}</div>`;
     }
+    if (working.length) {
+      html += `<h2>지금 일하는 중 <span class="count">${working.length}</span></h2><div class="card">${working.map(workRow).join("")}</div>`;
+    }
+    // 사람이 필요한 일: 가까운 3개만, 나머지는 [더 보기]
+    const NEED_SHOW = 3;
+    html += `<h2>사람이 필요해요 <span class="count">${needJobs.length}</span></h2>`;
+    html += needJobs.length ? (ui.showAllNeed ? needJobs : needJobs.slice(0, NEED_SHOW)).map(jobCard).join("") : `<div class="empty">빈자리가 없어요. 식당에서 연락이 오면 [일감 받기]를 누르세요.</div>`;
+    if (needJobs.length > NEED_SHOW) html += `<button class="btn big more-jobs" data-act="toggle-need">${ui.showAllNeed ? "접기" : `${needJobs.length - NEED_SHOW}건 더 보기`}</button>`;
     // 받을 수수료 (아직 입금 확인 안 된 것)
     const owed = unpaidByWorker();
     if (owed.length) {
@@ -759,7 +781,7 @@
         ${state.account ? "" : `<p class="hint" style="margin-top:12px">설정에 계좌번호를 적어 두면 수수료 안내 문자에 같이 들어가요.</p>`}</div>`;
     }
     html += `<h2>오늘·내일 확정된 일</h2>`;
-    html += fullJobs.length ? fullJobs.map(jobCard).join("") : `<div class="empty">아직 없어요</div>`;
+    html += fullJobs.length ? fullJobs.map(jobCard).join("") : `<div class="empty">아직 없어요. 사람을 다 채운 일감이 여기에 모여요.</div>`;
     // 이번 달: 출근 완료 / 받은 수수료 / 받을 수수료
     const paidSum = doneThisMonth.filter((a) => a.paid).reduce((sum, a) => sum + (Number(a.fee) || 0), 0);
     const owedSum = feeSum - paidSum;
@@ -956,7 +978,7 @@
   };
   const renderPeople = () => {
     const isW = ui.peopleMode === "workers";
-    return `<div class="segment"><button class="${isW ? "active" : ""}" data-act="people-mode" data-v="workers">구직자 ${state.workers.length}</button><button class="${isW ? "" : "active"}" data-act="people-mode" data-v="restaurants">식당 ${state.restaurants.length}</button></div>
+    return `<div class="segment"><button class="${isW ? "active" : ""}" data-act="people-mode" data-v="workers">사람 ${state.workers.length}</button><button class="${isW ? "" : "active"}" data-act="people-mode" data-v="restaurants">식당 ${state.restaurants.length}</button></div>
       <button class="btn primary big" data-act="${isW ? "new-worker" : "new-rest"}">${icon("plus")}${isW ? "사람 등록" : "식당 등록"}</button>
       ${isW ? `<button class="btn big" style="margin-top:10px" data-act="import-vcf">${icon("contacts")}연락처 한 번에 불러오기</button>
         <p class="hint" style="margin-top:6px">연락처 앱에서 <strong>내보내기</strong>로 만든 .vcf 파일을 골라요. 자세한 방법은 설정 화면에 있어요.</p>` : ""}
@@ -1005,8 +1027,8 @@
     <h2>약속 기록</h2>
     <div class="stat-grid"><div><strong>${s.done}</strong><small>${icon("check")}출근</small></div><div><strong>${s.late}</strong><small>${icon("alert")}직전취소</small></div><div><strong>${s.noshow}</strong><small>${icon("x")}안 나옴</small></div><div><strong>${s.rehire}</strong><small>${icon("heart", "fill")}또 찾음</small></div></div>
     ${ranks.length ? `<div class="card"><p style="margin:0"><strong>지금 추천 순서</strong></p>${ranks.map((r) => `<p class="small" style="margin:4px 0 0">${esc(r.role)}: ${r.total}명 중 <strong>${r.pos}번째</strong></p>`).join("")}<p class="hint">약속 잘 지키고 오래 쉰 분이 앞 순서예요. 재촉 전화가 오면 참고하세요.</p></div>` : ""}
-    <h2>예정된 일</h2>${upcoming.length ? `<div class="card"><ul class="history">${upcoming.map(line).join("")}</ul></div>` : `<div class="empty">없어요</div>`}
-    <h2>지난 기록</h2>${past.length ? `<div class="card"><ul class="history">${past.map(line).join("")}</ul></div>` : `<div class="empty">없어요</div>`}
+    <h2>예정된 일</h2>${upcoming.length ? `<div class="card"><ul class="history">${upcoming.map(line).join("")}</ul></div>` : `<div class="empty">예정된 일이 없어요. 일감에서 확정하면 여기에 나와요.</div>`}
+    <h2>지난 기록</h2>${past.length ? `<div class="card"><ul class="history">${past.map(line).join("")}</ul></div>` : `<div class="empty">아직 기록이 없어요.</div>`}
     <div class="danger-zone"><button class="btn big" data-act="toggle-active" data-id="${w.id}">${w.active === false ? "명단에 다시 보이기" : "명단에서 숨기기 (기록은 남음)"}</button>
       <button class="link-btn" data-act="del-worker" data-id="${w.id}">이 사람 완전히 지우기</button></div>`;
   };
@@ -1029,7 +1051,7 @@
   const renderMore = () => {
     const hasData = state.workers.length || state.jobs.length;
     const backupSub = state.lastBackup ? `마지막 백업 ${esc(dateText(state.lastBackup))}` : "아직 한 번도 안 했어요";
-    return `<h2>구직자 가져오기</h2>
+    return `<h2>사람 가져오기</h2>
     <div class="menu">${menuRow("import-vcf", "contacts", "연락처 파일 불러오기", "연락처를 한 번에 옮겨요")}</div>
     <details class="howto"><summary>연락처 파일 만드는 방법</summary>
       <ol>
@@ -1073,8 +1095,8 @@
     <p class="hint" style="margin:0 4px 0">자료는 이 휴대폰 안에만 있어요. 백업 파일은 '내 파일 → 다운로드'에 저장되고, 카카오톡 '나와의 채팅'에 보내 두면 더 안전해요.</p>
     <h2>연습</h2>
     <div class="menu">
-      ${menuRow("seed", "play", "연습용 예시 자료 넣기", hasData ? "지금 자료는 그대로 두고 구직자 20명·식당 20곳을 더해요" : "가짜 구직자·식당·일감으로 눌러 볼 수 있어요")}
-      ${demoCount().total ? menuRow("clear-demo", "trash", "연습용 자료만 지우기", `구직자 ${demoCount().workers}명 · 식당 ${demoCount().restaurants}곳 · 실제 자료는 그대로`, "warn") : ""}
+      ${menuRow("seed", "play", "연습용 예시 자료 넣기", hasData ? "지금 자료는 그대로 두고 사람 20명·식당 20곳을 더해요" : "가짜 사람·식당·일감으로 눌러 볼 수 있어요")}
+      ${demoCount().total ? menuRow("clear-demo", "trash", "연습용 자료만 지우기", `사람 ${demoCount().workers}명 · 식당 ${demoCount().restaurants}곳 · 실제 자료는 그대로`, "warn") : ""}
     </div>
     <div class="danger-zone"><button class="link-btn" data-act="wipe">모든 자료 지우기</button></div>
     <p class="app-version">앱 버전 ${APP_VERSION}</p>`;
@@ -1726,7 +1748,7 @@
         ${placeNameField("", r.name, true)}
         <div class="two"><label class="field">지역<input name="area" placeholder="예: 종로" value="${esc(r.area)}" /></label><label class="field">전화<input name="phone" type="tel" inputmode="tel" value="${esc(r.phone)}" /></label></div>
         ${addressFields("", r)}
-        <label class="field">오시는 길<textarea name="way" rows="2" placeholder="예: 종로3가역 5번 출구로 나와서 파리바게뜨 끼고 골목 50m, 2층">${esc(r.way || "")}</textarea><span class="hint">구직자에게 보내는 확정 문자에 함께 들어가요</span></label>
+        <label class="field">오시는 길<textarea name="way" rows="2" placeholder="예: 종로3가역 5번 출구로 나와서 파리바게뜨 끼고 골목 50m, 2층">${esc(r.way || "")}</textarea><span class="hint">일하러 가는 분에게 보내는 확정 문자에 함께 들어가요</span></label>
         ${existing && mapUrl(existing) ? `<a class="btn" style="width:100%;margin:-4px 0 18px" href="${mapUrl(existing)}" target="_blank" rel="noopener">${icon("pin")}지도에서 위치 확인</a>` : ""}
         <label class="field">메모<textarea name="memo" rows="2" placeholder="예: 사장님이 조용한 분 선호">${esc(r.memo)}</textarea></label>
         ${existing ? `<button type="button" class="link-btn" data-act="del-rest" data-id="${existing.id}">이 식당 지우기</button>` : ""}`,
@@ -1769,7 +1791,7 @@
       title: `${w?.name || ""}님 확정 취소`,
       body: `<p>왜 취소하나요?</p><div class="choice-list">
         <label class="choice"><input type="radio" name="kind" value="mistake" required /><span><strong>잘못 눌렀어요</strong><small>명단에서 빼고 추천 순서로 돌려요 · 기록에 안 남아요</small></span></label>
-        <label class="choice"><input type="radio" name="kind" value="rest_cancel" /><span><strong>식당 사정으로 취소</strong><small>구직자 기록에 불이익 없음</small></span></label>
+        <label class="choice"><input type="radio" name="kind" value="rest_cancel" /><span><strong>식당 사정으로 취소</strong><small>그 사람 기록에 불이익 없음</small></span></label>
         <label class="choice"><input type="radio" name="kind" value="cancel_ok" /><span><strong>본인이 미리 알려줬어요</strong><small>하루 전 이상 · 기록에 불이익 없음</small></span></label>
         <label class="choice"><input type="radio" name="kind" value="late" /><span><strong>본인이 직전에 취소했어요</strong><small>약속 기록에 '직전 취소'로 남아요</small></span></label>
         <label class="choice"><input type="radio" name="kind" value="noshow" /><span><strong>연락 없이 안 나왔어요</strong><small>약속 기록에 '안 나옴'으로 남아요</small></span></label></div>`,
@@ -1868,7 +1890,7 @@
     try {
       const data = JSON.parse(await file.text());
       if (!isValidData(data)) throw new Error("bad");
-      if (!confirm(`백업 파일을 불러오면 지금 휴대폰의 자료가 백업 내용으로 바뀌어요.\n(구직자 ${data.workers.length}명, 일감 ${data.jobs.length}건)\n계속할까요?`)) return;
+      if (!(await ask({ title: "백업 파일을 불러올까요?", text: `지금 휴대폰의 자료가 백업 내용으로 바뀌어요.\n(사람 ${data.workers.length}명, 일감 ${data.jobs.length}건)`, ok: "불러오기", danger: true }))) return;
       const { photos: savedPhotos = {}, ...rest } = data;
       state = { ...blank(), feeTrack: false, ...rest };
       startFeeTrack(state);
@@ -2035,7 +2057,7 @@
     state.jobs.push(...J);
     state.assigns.push(...A);
     refresh();
-    toast("연습용 자료를 넣었어요 (구직자 20명, 식당 20곳)");
+    toast("연습용 자료를 넣었어요 (사람 20명, 식당 20곳)");
     // 연습용 프로필 사진 (AI로 만든 가상 인물, demo-photos 폴더) — 받아지는 대로 넣고 다시 그림
     Promise.all(W.map(async (w, i) => {
       try {
@@ -2081,9 +2103,9 @@
       const sibling = cur && [...groupOf(cur), ...reqOf(cur)].some((x) => x.id === el.dataset.id);
       go({ name: "job", id: el.dataset.id }, { replace: Boolean(sibling) });
     },
-    "del-job": (el) => {
+    "del-job": async (el) => {
       const j = job(el.dataset.id);
-      if (!j || !confirm(`${dateText(j.date)} ${restName(j)} 일감과 연락 기록을 지울까요?`)) return;
+      if (!j || !(await ask({ title: "이 일감을 지울까요?", text: `${dateText(j.date)} ${restName(j)} ${j.role}\n연락·확정 기록도 함께 지워져요.`, ok: "지우기", danger: true }))) return;
       state.jobs = state.jobs.filter((x) => x.id !== j.id);
       state.assigns = state.assigns.filter((a) => a.jobId !== j.id);
       save();
@@ -2094,9 +2116,9 @@
     "edit-worker": (el) => workerForm(worker(el.dataset.id)),
     "open-worker": (el) => go({ name: "worker", id: el.dataset.id }),
     "toggle-active": (el) => { const w = worker(el.dataset.id); w.active = w.active === false; refresh(); toast(w.active ? "명단에 다시 보여요" : "명단에서 숨겼어요 (추천에 안 나와요)"); },
-    "del-worker": (el) => {
+    "del-worker": async (el) => {
       const w = worker(el.dataset.id);
-      if (!w || !confirm(`${w.name}님과 이 분의 모든 기록을 지울까요?\n되돌릴 수 없어요. 숨기기를 먼저 고려해 주세요.`)) return;
+      if (!w || !(await ask({ title: `${w.name}님을 완전히 지울까요?`, text: "출근·수수료 기록까지 모두 지워지고 되돌릴 수 없어요.\n기록을 남기려면 '명단에서 숨기기'를 쓰세요.", ok: "완전히 지우기", danger: true }))) return;
       state.workers = state.workers.filter((x) => x.id !== w.id);
       state.assigns = state.assigns.filter((a) => a.workerId !== w.id);
       removePhoto(w.id);
@@ -2106,10 +2128,10 @@
     },
     "new-rest": () => restForm(),
     "edit-rest": (el) => restForm(rest(el.dataset.id)),
-    "del-rest": (el) => {
+    "del-rest": async (el) => {
       const r = rest(el.dataset.id);
       if (state.jobs.some((j) => j.restaurantId === r.id)) { toast("일감 기록이 있는 식당은 지울 수 없어요"); return; }
-      if (!confirm(`${r.name}을(를) 지울까요?`)) return;
+      if (!(await ask({ title: `${r.name}${hasBatchim(r.name) ? "을" : "를"} 지울까요?`, ok: "지우기", danger: true }))) return;
       state.restaurants = state.restaurants.filter((x) => x.id !== r.id);
       sheet.close();
       refresh();
@@ -2141,10 +2163,10 @@
       toast(a.paid ? `수수료 ${won(a.fee)} 받음으로 표시했어요` : "받음 표시를 취소했어요");
     },
     // 이 사람의 안 받은 수수료를 모두 받음으로
-    "pay-all": (el) => {
+    "pay-all": async (el) => {
       const list = unpaidList(el.dataset.id);
       if (!list.length) return;
-      if (list.length > 1 && !confirm(`${list[0].w.name}님 수수료 ${list.length}건, ${won(feeSumOf(list))}을 모두 받음으로 표시할까요?`)) return;
+      if (list.length > 1 && !(await ask({ title: `${list[0].w.name}님 수수료를 모두 받았나요?`, text: `${list.length}건 · ${won(feeSumOf(list))}`, ok: "모두 받음", cancel: "아니요" }))) return;
       list.forEach(({ a }) => { a.paid = true; a.paidAt = today(); });
       refresh();
       toast(`${won(feeSumOf(list))} 받음으로 표시했어요`);
@@ -2157,6 +2179,8 @@
       toast(w.trust ? `'${MANUAL_TRUST[w.trust].label}'${hasBatchim(MANUAL_TRUST[w.trust].label) ? "으로" : "로"} 정했어요` : "기록을 보고 자동으로 정해요");
     },
     "save-account": () => { state.account = $("#fee-account").value.trim(); refresh(); toast(state.account ? "계좌를 저장했어요" : "계좌를 지웠어요"); },
+    // 홈 '사람이 필요해요' 더 보기 / 접기
+    "toggle-need": () => { ui.showAllNeed = !ui.showAllNeed; render(); },
     "toggle-rehire": (el) => { const a = assign(el.dataset.id); a.rehire = !a.rehire; refresh(); },
     // 실제 근무 시간 고치기: 약속보다 더/덜 일했을 때 그 사람만 일당·수수료 다시 계산
     "actual-time": (el) => {
@@ -2236,7 +2260,7 @@
     "copy-script": (el) => copyText(state.scripts.find((s) => s.id === el.dataset.id)?.text || ""),
     "edit-script": (el) => scriptForm(state.scripts.find((s) => s.id === el.dataset.id)),
     "new-script": () => scriptForm(),
-    "del-script": (el) => { if (!confirm("이 문구를 지울까요?")) return; state.scripts = state.scripts.filter((s) => s.id !== el.dataset.id); sheet.close(); refresh(); },
+    "del-script": async (el) => { if (!(await ask({ title: "이 문구를 지울까요?", ok: "지우기", danger: true }))) return; state.scripts = state.scripts.filter((s) => s.id !== el.dataset.id); sheet.close(); refresh(); },
     "backup": doBackup,
     "import": () => $("#import-file").click(),
     "import-vcf": () => $("#vcf-file").click(),
@@ -2252,22 +2276,22 @@
       $("#rate-n").value = Math.round(day * 1.5);
     },
     "save-fee": () => { const n = Number($("#fee-rate").value); if (!(n >= 0 && n <= 100)) { toast("0~100 사이로 적어 주세요"); return; } state.feeRate = n; refresh(); toast("저장했어요"); },
-    "seed": () => {
+    "seed": async () => {
       const hasData = state.workers.length || state.jobs.length;
-      if (hasData && !confirm("지금 자료에 연습용 구직자 20명·식당 20곳이 더해져요.\n연습 자료는 이름에 (예시)가 붙고, 나중에 '연습용 자료만 지우기'로 지울 수 있어요.\n넣을까요?")) return;
+      if (hasData && !(await ask({ title: "연습용 자료를 넣을까요?", text: "지금 자료에 연습용 사람 20명·식당 20곳이 더해져요.\n이름에 (예시)가 붙고, 나중에 '연습용 자료만 지우기'로 지울 수 있어요.", ok: "넣기", cancel: "안 넣기" }))) return;
       seed();
     },
-    "clear-demo": () => {
+    "clear-demo": async () => {
       const c = demoCount();
       if (!c.total) { toast("지울 연습용 자료가 없어요"); return; }
-      if (!confirm(`연습용 자료를 지울까요?\n(구직자 ${c.workers}명, 식당 ${c.restaurants}곳, 일감 ${c.jobs}건)\n실제로 넣은 자료는 그대로 남아요.`)) return;
+      if (!(await ask({ title: "연습용 자료만 지울까요?", text: `사람 ${c.workers}명, 식당 ${c.restaurants}곳, 일감 ${c.jobs}건\n실제로 넣은 자료는 그대로 남아요.`, ok: "지우기", danger: true }))) return;
       clearDemo();
       refresh();
       toast("연습용 자료만 지웠어요");
     },
-    "wipe": () => {
-      if (!confirm("정말 모든 자료를 지울까요? 백업 파일이 없으면 되돌릴 수 없어요.")) return;
-      if (!confirm("한 번 더 확인할게요. 모두 지울까요?")) return;
+    "wipe": async () => {
+      if (!(await ask({ title: "모든 자료를 지울까요?", text: "사람·식당·일감·수수료 기록이 모두 사라져요.\n백업 파일이 없으면 되돌릴 수 없어요.", ok: "모두 지우기", danger: true }))) return;
+      if (!(await ask({ title: "한 번 더 확인할게요", text: "정말 모두 지울까요?", ok: "모두 지우기", danger: true }))) return;
       state = blank();
       photos.clear();
       photoDb.clear().catch(() => {});
