@@ -2,7 +2,7 @@
   "use strict";
 
   // 앱 버전(APP_VERSION): 설정 화면 맨 아래에 표시. sw.js의 CACHE 이름과 같이 올림
-  const APP_VERSION = "v56";
+  const APP_VERSION = "v57";
   // 저장소 이름(KEY): 휴대폰 브라우저 안에 자료를 저장할 때 쓰는 이름
   const KEY = "dawon-mobile-v1";
   // 업무 종류(ROLES)
@@ -1377,6 +1377,7 @@
         const start = val(fd, "start");
         const end = val(fd, "end");
         if (!start || !end) { toast("시작·끝 시간을 골라 주세요"); form.querySelector(".time-pick").scrollIntoView({ block: "center" }); return false; }
+        if (start === end) { toast("시작과 끝 시간이 같아요. 끝 시간을 다시 골라 주세요"); form.querySelector(".time-pick").scrollIntoView({ block: "center" }); return false; }
         const dates = datesOf(form);
         if (!dates.length) { toast("날짜를 확인해 주세요"); return false; }
         if (dates.length > MAX_DAYS) { toast(`한 번에 ${MAX_DAYS}일까지 넣을 수 있어요`); return false; }
@@ -2203,15 +2204,18 @@
             const end = form.elements.end.value;
             const box = $("#act-calc", form);
             if (!start || !end) { box.textContent = ""; return; }
+            if (start === end) { box.innerHTML = `<span class="overdue">시작과 끝 시간이 같아요. 끝 시간을 다시 골라 주세요.</span>`; return; }
             const min = workMinutes(start, end, j.breakMin);
+            // 16시간이 넘으면 끝 시간을 잘못 고른 경우가 많아서 확인 안내 (밤을 넘긴 근무는 그대로 계산)
+            const longNote = min > 16 * 60 ? `<br><span class="overdue">${hoursText(min)} 근무예요. 끝 시간이 맞는지 확인해 주세요.</span>` : "";
             const diff = min - workMinutes(j.start, j.end, j.breakMin);
             const diffText = diff ? ` (약속보다 ${hoursText(Math.abs(diff))} ${diff > 0 ? "더" : "덜"})` : "";
-            if (!j.hourly) { box.innerHTML = `근무 ${hoursText(min)}${diffText} · 시급이 없어서 일당은 그대로예요`; return; }
+            if (!j.hourly) { box.innerHTML = `근무 ${hoursText(min)}${diffText} · 시급이 없어서 일당은 그대로예요${longNote}`; return; }
             const pay = payBreakdown(start, end, j.breakMin, j.hourly, j.nightHourly || 0).pay;
             // 비교 기준: 저장된 일당이 아니라 '약속 시간 × 시급'으로 다시 계산한 값 (시간을 안 바꾸면 차이 0)
             const base = payBreakdown(j.start, j.end, j.breakMin, j.hourly, j.nightHourly || 0).pay;
             const gap = pay - base;
-            box.innerHTML = `${won(j.hourly)} × ${hoursText(min)}${diffText}<br><strong>일당 ${won(pay)}</strong>${gap ? ` · 약속보다 ${gap > 0 ? "+" : "−"}${won(Math.abs(gap))}` : ""}`;
+            box.innerHTML = `${won(j.hourly)} × ${hoursText(min)}${diffText}<br><strong>일당 ${won(pay)}</strong>${gap ? ` · 약속보다 ${gap > 0 ? "+" : "−"}${won(Math.abs(gap))}` : ""}${longNote}`;
           };
           // 시·분을 고르면 숨은 칸에 "HH:MM"으로 넣음
           form.querySelectorAll(".time-pick").forEach((wrap) => wrap.addEventListener("change", () => {
@@ -2226,6 +2230,7 @@
           const start = val(fd, "start");
           const end = val(fd, "end");
           if (!start || !end) { toast("시작·끝 시간을 골라 주세요"); return false; }
+          if (start === end) { toast("시작과 끝 시간이 같아요. 끝 시간을 다시 골라 주세요"); return false; }
           a.actStart = start !== j.start ? start : "";
           a.actEnd = end !== j.end ? end : "";
           if (a.outcome === "done") a.fee = feeOf(a, j);
