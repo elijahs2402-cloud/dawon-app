@@ -552,3 +552,6 @@ a.menu-row strong { color: var(--ink); }
 /* 확정된 분 카드 안의 진행 막대 */
 .person-row .work-row { margin-top: 2px; }
 .person-row .work-row .progress { margin: 14px 0 6px; }
+/* 실제 근무 시간 줄 */
+.actual-line { color: var(--sub); }
+.nowrap { white-space: nowrap; }

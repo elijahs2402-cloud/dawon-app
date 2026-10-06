@@ -2,7 +2,7 @@
   "use strict";
 
   // 앱 버전(APP_VERSION): 설정 화면 맨 아래에 표시. sw.js의 CACHE 이름과 같이 올림
-  const APP_VERSION = "v53";
+  const APP_VERSION = "v54";
   // 저장소 이름(KEY): 휴대폰 브라우저 안에 자료를 저장할 때 쓰는 이름
   const KEY = "dawon-mobile-v1";
   // 업무 종류(ROLES)
@@ -637,19 +637,30 @@
     if (e <= s) e.setDate(e.getDate() + 1);
     return { s, e };
   };
-  // 지금 일하는 중인지: '출근함'을 눌렀고 지금이 근무 시간 안 (홈·사람·일감 화면 모두 이 기준)
+  // 실제 근무 시간: 사람마다 약속보다 더/덜 일했으면 a.actStart·a.actEnd에 적어 둠 (없으면 약속 시간)
+  const effJob = (a, j) => (j && (a.actStart || a.actEnd) ? { ...j, start: a.actStart || j.start, end: a.actEnd || j.end } : j);
+  // 그 사람의 일당: 실제 시간이 있으면 시급 × 실제 시간으로 다시 계산
+  const payOf = (a, j) => {
+    const e = effJob(a, j);
+    if (e === j || !j.hourly) return Number(j.pay) || 0;
+    return payBreakdown(e.start, e.end, j.breakMin, j.hourly, j.nightHourly || 0).pay;
+  };
+  const feeOf = (a, j) => Math.round(payOf(a, j) * state.feeRate / 100);
+  // 약속보다 얼마나 더/덜 일했는지 (분, 더 일하면 +)
+  const extraMin = (a, j) => { const e = effJob(a, j); return e === j ? 0 : workMinutes(e.start, e.end, j.breakMin) - workMinutes(j.start, j.end, j.breakMin); };
+  // 지금 일하는 중인지: '출근함'을 눌렀고 지금이 (실제) 근무 시간 안 (홈·사람·일감 화면 모두 이 기준)
   const isWorking = (a, j) => {
     if (a.status !== "confirmed" || a.outcome !== "done" || !j) return false;
-    const { s, e } = shiftOf(j);
+    const { s, e } = shiftOf(effJob(a, j));
     const now = new Date();
     return now >= s && now < e;
   };
-  // 지금 일하는 중인 사람들 (어제 시작한 밤 근무 포함)
+  // 지금 일하는 중인 사람들 (어제 시작한 밤 근무 포함). j는 실제 근무 시간이 반영된 일감
   const workingNow = () => {
     const now = new Date();
     return state.assigns
       .filter((a) => a.status === "confirmed" && a.outcome === "done")
-      .map((a) => ({ a, j: job(a.jobId), w: worker(a.workerId) }))
+      .map((a) => ({ a, j: effJob(a, job(a.jobId)), w: worker(a.workerId) }))
       .filter((x) => x.j && x.w && (x.j.date === today() || x.j.date === today(-1)))
       .filter((x) => { const { s, e } = shiftOf(x.j); return now >= s && now < e; })
       .sort((x, y) => shiftOf(x.j).e - shiftOf(y.j).e); // 곧 끝나는 사람부터
@@ -790,13 +801,14 @@
     if (a.outcome === "done") {
       const rehireItem = { act: "toggle-rehire", ic: "heart", label: a.rehire ? "'식당이 또 찾음' 지우기" : "식당이 또 찾음" };
       const undoItem = { act: "undo-assign", ic: "x", label: "출근 취소" };
+      const timeItem = { act: "actual-time", ic: "edit", label: "실제 근무 시간 고치기" };
       if (fee && !a.paid) return {
         main: [btn("toggle-paid", "check", "수수료 받음"), w.phone ? link(smsHref(w.phone, feeMsg(w, [{ a, j }])), "message", "수수료 안내") : ""].filter(Boolean),
-        more: [rehireItem, undoItem],
+        more: [timeItem, rehireItem, undoItem],
       };
       return {
         main: [`<button class="btn ${a.rehire ? "on" : ""}" data-act="toggle-rehire" data-id="${a.id}">${icon("heart", a.rehire ? "fill" : "")}${a.rehire ? "또 찾음" : "또 찾나요?"}</button>`, call].filter(Boolean),
-        more: [...(fee ? [{ act: "toggle-paid", ic: "x", label: "수수료 받음 취소" }] : []), undoItem],
+        more: [timeItem, ...(fee ? [{ act: "toggle-paid", ic: "x", label: "수수료 받음 취소" }] : []), undoItem],
       };
     }
     const confirmItem = w.phone ? { href: smsHref(w.phone, confirmMsg(j, w)), ic: "message", label: "확정 문자" } : null;
@@ -828,12 +840,15 @@
       const fee = Number(a.fee) || 0;
       if (a.outcome === "done") {
         side = `<strong class="row-state ok">출근함</strong>`;
-        state_ = fee ? `<span class="small">수수료 ${won(fee)} · ${a.paid ? `<span class="paid">받음</span>` : `<span class="overdue">미수</span>`}</span>` : "";
+        // 약속과 다르게 일했으면 "실제 오전 9시 ~ 오후 7시(10시간) · 1시간 연장"
+        const ex = extraMin(a, j);
+        const actual = effJob(a, j) !== j ? `<span class="small actual-line">실제 ${esc(korTime(effJob(a, j).start))} ~ ${esc(korTime(effJob(a, j).end))}${ex ? ` · <span class="overdue nowrap">${hoursText(Math.abs(ex))} ${ex > 0 ? "연장" : "줄어듦"}</span>` : ""}</span><br>` : "";
+        state_ = `${actual}${fee ? `<span class="small">수수료 ${won(fee)} · ${a.paid ? `<span class="paid">받음</span>` : `<span class="overdue">미수</span>`}</span>` : ""}`;
       } else side = `<strong class="row-state">확정</strong>`;
       const { main, more } = rowActions(a, j, w);
       buttons = `${main.join("")}${more.length ? `<button class="btn more-btn" data-act="more-actions" data-id="${a.id}" aria-label="더보기">⋯</button>` : ""}`;
       // 출근함 + 근무 시간 안이면 진행 막대 (홈의 '지금 일하는 중'과 같은 기준)
-      const bar = isWorking(a, j) ? `<div class="work-row">${workBar(j)}</div>` : "";
+      const bar = isWorking(a, j) ? `<div class="work-row">${workBar(effJob(a, j))}</div>` : "";
       return `<div class="person-row"><div class="who"><button class="avatar-link" data-act="open-worker" data-id="${w.id}" aria-label="${esc(w.name)} 보기">${avatar(w)}</button><div>${head}${state_ ? `<div class="status-line">${state_}</div>` : ""}</div>${side}</div>${bar}<div class="btn-row act-row">${buttons}</div></div>`;
     } else if (a.status === "asked") {
       state_ = `<span class="pill gray">연락함 · 답 기다리는 중</span>`;
@@ -1368,7 +1383,7 @@
         if (existing) {
           Object.assign(existing, common, perRole[0], { date: dates[0] });
           // 일당이 바뀌면 이미 출근한 분 수수료도 다시 계산
-          assignsOf(existing.id).filter((a) => a.outcome === "done").forEach((a) => { a.fee = Math.round(existing.pay * state.feeRate / 100); });
+          assignsOf(existing.id).filter((a) => a.outcome === "done").forEach((a) => { a.fee = feeOf(a, existing); });
           refresh();
           toast("고쳤어요");
           return;
@@ -1779,7 +1794,7 @@
   // 출근 결과 기록
   const setOutcome = (a, v) => {
     const j = job(a.jobId);
-    if (v === "done") { a.status = "confirmed"; a.outcome = "done"; a.fee = Math.round((Number(j?.pay) || 0) * state.feeRate / 100); a.paid = false; a.paidAt = ""; }
+    if (v === "done") { a.status = "confirmed"; a.outcome = "done"; a.fee = j ? feeOf(a, j) : 0; a.paid = false; a.paidAt = ""; }
     else { a.status = "canceled"; a.outcome = v; a.fee = 0; a.rehire = false; a.paid = false; }
     save();
   };
@@ -2116,7 +2131,7 @@
     "remove-assign": (el) => { state.assigns = state.assigns.filter((a) => a.id !== el.dataset.id); refresh(); },
     "outcome": (el) => { buzz(); setOutcome(assign(el.dataset.id), el.dataset.v); render(); toast(el.dataset.v === "done" ? "출근으로 기록했어요" : "안 나옴으로 기록했어요"); },
     "cancel-ask": (el) => cancelAsk(assign(el.dataset.id)),
-    "undo-assign": (el) => { const a = assign(el.dataset.id); a.status = "confirmed"; a.outcome = ""; a.fee = 0; a.rehire = false; a.paid = false; refresh(); toast("확정 상태로 되돌렸어요"); },
+    "undo-assign": (el) => { const a = assign(el.dataset.id); a.status = "confirmed"; a.outcome = ""; a.fee = 0; a.rehire = false; a.paid = false; a.actStart = ""; a.actEnd = ""; refresh(); toast("확정 상태로 되돌렸어요"); },
     // 수수료 받음 표시 / 취소
     "toggle-paid": (el) => {
       const a = assign(el.dataset.id);
@@ -2143,6 +2158,67 @@
     },
     "save-account": () => { state.account = $("#fee-account").value.trim(); refresh(); toast(state.account ? "계좌를 저장했어요" : "계좌를 지웠어요"); },
     "toggle-rehire": (el) => { const a = assign(el.dataset.id); a.rehire = !a.rehire; refresh(); },
+    // 실제 근무 시간 고치기: 약속보다 더/덜 일했을 때 그 사람만 일당·수수료 다시 계산
+    "actual-time": (el) => {
+      const a = assign(el.dataset.id);
+      const j = a && job(a.jobId);
+      const w = a && worker(a.workerId);
+      if (!j || !w) return;
+      const cur = effJob(a, j);
+      openSheet({
+        title: `${w.name}님 실제 근무 시간`,
+        body: `<p class="hint" style="margin:0 0 16px">약속: ${esc(korRange(j))}</p>
+          <div class="field">시작${timePicker("start", cur.start)}</div>
+          <div class="field">끝${timePicker("end", cur.end)}</div>
+          <div class="pay-calc" id="act-calc"></div>
+          ${a.actStart || a.actEnd ? `<button type="button" class="link-btn" style="margin-top:14px" data-act="actual-reset" data-id="${a.id}">약속 시간으로 되돌리기</button>` : ""}`,
+        submit: "저장",
+        onReady: (form) => {
+          const calc = () => {
+            const start = form.elements.start.value;
+            const end = form.elements.end.value;
+            const box = $("#act-calc", form);
+            if (!start || !end) { box.textContent = ""; return; }
+            const min = workMinutes(start, end, j.breakMin);
+            const diff = min - workMinutes(j.start, j.end, j.breakMin);
+            const diffText = diff ? ` (약속보다 ${hoursText(Math.abs(diff))} ${diff > 0 ? "더" : "덜"})` : "";
+            if (!j.hourly) { box.innerHTML = `근무 ${hoursText(min)}${diffText} · 시급이 없어서 일당은 그대로예요`; return; }
+            const pay = payBreakdown(start, end, j.breakMin, j.hourly, j.nightHourly || 0).pay;
+            const gap = pay - (Number(j.pay) || 0);
+            box.innerHTML = `${won(j.hourly)} × ${hoursText(min)}${diffText}<br><strong>일당 ${won(pay)}</strong>${gap ? ` · 약속보다 ${gap > 0 ? "+" : "−"}${won(Math.abs(gap))}` : ""}`;
+          };
+          // 시·분을 고르면 숨은 칸에 "HH:MM"으로 넣음
+          form.querySelectorAll(".time-pick").forEach((wrap) => wrap.addEventListener("change", () => {
+            const h = wrap.querySelector('[data-part="h"]').value;
+            const m = wrap.querySelector('[data-part="m"]').value;
+            form.elements[wrap.dataset.time].value = h === "" ? "" : `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+            calc();
+          }));
+          calc();
+        },
+        onSubmit: (fd) => {
+          const start = val(fd, "start");
+          const end = val(fd, "end");
+          if (!start || !end) { toast("시작·끝 시간을 골라 주세요"); return false; }
+          a.actStart = start !== j.start ? start : "";
+          a.actEnd = end !== j.end ? end : "";
+          if (a.outcome === "done") a.fee = feeOf(a, j);
+          refresh();
+          const ex = extraMin(a, j);
+          toast(ex ? `${hoursText(Math.abs(ex))} ${ex > 0 ? "연장" : "줄어듦"}으로 고쳤어요${a.outcome === "done" ? ` · 수수료 ${won(a.fee)}` : ""}` : "약속 시간 그대로예요");
+        },
+      });
+    },
+    "actual-reset": (el) => {
+      const a = assign(el.dataset.id);
+      const j = a && job(a.jobId);
+      if (!j) return;
+      a.actStart = ""; a.actEnd = "";
+      if (a.outcome === "done") a.fee = feeOf(a, j);
+      sheet.close();
+      refresh();
+      toast("약속 시간으로 되돌렸어요");
+    },
     // 확정된 분 카드의 [⋯] 더보기: 가끔 쓰는 일을 아래에서 올라오는 목록으로
     "more-actions": (el) => {
       const a = assign(el.dataset.id);
