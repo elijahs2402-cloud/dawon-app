@@ -2,7 +2,7 @@
   "use strict";
 
   // 앱 버전(APP_VERSION): 설정 화면 맨 아래에 표시. sw.js의 CACHE 이름과 같이 올림
-  const APP_VERSION = "v51";
+  const APP_VERSION = "v52";
   // 저장소 이름(KEY): 휴대폰 브라우저 안에 자료를 저장할 때 쓰는 이름
   const KEY = "dawon-mobile-v1";
   // 업무 종류(ROLES)
@@ -829,7 +829,11 @@
       } else side = `<strong class="row-state">확정</strong>`;
       const { main, more } = rowActions(a, j, w);
       buttons = `${main.join("")}${more.length ? `<button class="btn more-btn" data-act="more-actions" data-id="${a.id}" aria-label="더보기">⋯</button>` : ""}`;
-      return `<div class="person-row"><div class="who"><button class="avatar-link" data-act="open-worker" data-id="${w.id}" aria-label="${esc(w.name)} 보기">${avatar(w)}</button><div>${head}${state_ ? `<div class="status-line">${state_}</div>` : ""}</div>${side}</div><div class="btn-row act-row">${buttons}</div></div>`;
+      // 지금 근무 시간 안이면 진행 막대 (홈의 '지금 일하는 중'과 같은 기준)
+      const { s: ss, e: se } = shiftOf(j);
+      const now = new Date();
+      const bar = now >= ss && now < se ? `<div class="work-row">${workBar(j)}</div>` : "";
+      return `<div class="person-row"><div class="who"><button class="avatar-link" data-act="open-worker" data-id="${w.id}" aria-label="${esc(w.name)} 보기">${avatar(w)}</button><div>${head}${state_ ? `<div class="status-line">${state_}</div>` : ""}</div>${side}</div>${bar}<div class="btn-row act-row">${buttons}</div></div>`;
     } else if (a.status === "asked") {
       state_ = `<span class="pill gray">연락함 · 답 기다리는 중</span>`;
       buttons = `${contactButtons(w, j, offerMsg(j, w))}
@@ -1098,9 +1102,9 @@
     requestAnimationFrame(step);
   });
   const refresh = () => { save(); render(); };
-  // 홈·사람 화면을 보고 있으면 1분마다 다시 그려서 '일하는 중' 막대가 차오르게 함 (입력창이 열려 있으면 건너뜀)
+  // 홈·사람·일감 화면을 보고 있으면 1분마다 다시 그려서 '일하는 중' 막대가 차오르게 함 (입력창이 열려 있으면 건너뜀)
   setInterval(() => {
-    if (!["home", "worker"].includes(route.name) || sheet.open || document.hidden) return;
+    if (!["home", "worker", "job"].includes(route.name) || sheet.open || document.hidden) return;
     const y = window.scrollY;
     render();
     window.scrollTo(0, y);

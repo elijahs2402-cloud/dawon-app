@@ -549,3 +549,6 @@ body { overflow-x: hidden; }
 .more-menu .menu-row::after { display: none; }
 a.menu-row { text-decoration: none; color: inherit; }
 a.menu-row strong { color: var(--ink); }
+/* 확정된 분 카드 안의 진행 막대 */
+.person-row .work-row { margin-top: 2px; }
+.person-row .work-row .progress { margin: 14px 0 6px; }
