@@ -2,7 +2,7 @@
   "use strict";
 
   // 앱 버전(APP_VERSION): 설정 화면 맨 아래에 표시. sw.js의 CACHE 이름과 같이 올림
-  const APP_VERSION = "v52";
+  const APP_VERSION = "v53";
   // 저장소 이름(KEY): 휴대폰 브라우저 안에 자료를 저장할 때 쓰는 이름
   const KEY = "dawon-mobile-v1";
   // 업무 종류(ROLES)
@@ -637,11 +637,18 @@
     if (e <= s) e.setDate(e.getDate() + 1);
     return { s, e };
   };
-  // 지금 일하는 중: 확정된 분 중 지금이 근무 시간 안인 사람 (어제 시작한 밤 근무 포함)
+  // 지금 일하는 중인지: '출근함'을 눌렀고 지금이 근무 시간 안 (홈·사람·일감 화면 모두 이 기준)
+  const isWorking = (a, j) => {
+    if (a.status !== "confirmed" || a.outcome !== "done" || !j) return false;
+    const { s, e } = shiftOf(j);
+    const now = new Date();
+    return now >= s && now < e;
+  };
+  // 지금 일하는 중인 사람들 (어제 시작한 밤 근무 포함)
   const workingNow = () => {
     const now = new Date();
     return state.assigns
-      .filter((a) => a.status === "confirmed")
+      .filter((a) => a.status === "confirmed" && a.outcome === "done")
       .map((a) => ({ a, j: job(a.jobId), w: worker(a.workerId) }))
       .filter((x) => x.j && x.w && (x.j.date === today() || x.j.date === today(-1)))
       .filter((x) => { const { s, e } = shiftOf(x.j); return now >= s && now < e; })
@@ -660,16 +667,12 @@
       <div class="muted small">${esc(restName(j))} ${esc(j.role)}</div></div></div>
       ${workBar(j)}</div>`;
 
-  // 근무 날이 지났는데 출근 여부를 아직 안 적은 사람들 (지금 일하는 중인 분은 끝난 뒤에)
-  const pendingChecks = () => {
-    const now = new Date();
-    return state.assigns
-      .filter((a) => a.status === "confirmed" && !a.outcome)
-      .map((a) => ({ a, j: job(a.jobId), w: worker(a.workerId) }))
-      .filter((x) => x.j && x.w && x.j.date <= today())
-      .filter((x) => { const { s, e } = shiftOf(x.j); return !(now >= s && now < e); })
-      .sort((x, y) => sortJobs(x.j, y.j));
-  };
+  // 근무 날이 됐는데 출근 여부를 아직 안 적은 사람들 (출근함을 누르면 '지금 일하는 중'으로 옮겨감)
+  const pendingChecks = () => state.assigns
+    .filter((a) => a.status === "confirmed" && !a.outcome)
+    .map((a) => ({ a, j: job(a.jobId), w: worker(a.workerId) }))
+    .filter((x) => x.j && x.w && x.j.date <= today())
+    .sort((x, y) => sortJobs(x.j, y.j));
 
   const checkRow = ({ a, j, w }) => `<div class="check-row">
       <div class="who"><button class="avatar-link" data-act="open-worker" data-id="${w.id}" aria-label="${esc(w.name)} 보기">${avatar(w)}</button><div><button class="name-link" data-act="open-worker" data-id="${w.id}">${esc(w.name)}</button>
@@ -829,10 +832,8 @@
       } else side = `<strong class="row-state">확정</strong>`;
       const { main, more } = rowActions(a, j, w);
       buttons = `${main.join("")}${more.length ? `<button class="btn more-btn" data-act="more-actions" data-id="${a.id}" aria-label="더보기">⋯</button>` : ""}`;
-      // 지금 근무 시간 안이면 진행 막대 (홈의 '지금 일하는 중'과 같은 기준)
-      const { s: ss, e: se } = shiftOf(j);
-      const now = new Date();
-      const bar = now >= ss && now < se ? `<div class="work-row">${workBar(j)}</div>` : "";
+      // 출근함 + 근무 시간 안이면 진행 막대 (홈의 '지금 일하는 중'과 같은 기준)
+      const bar = isWorking(a, j) ? `<div class="work-row">${workBar(j)}</div>` : "";
       return `<div class="person-row"><div class="who"><button class="avatar-link" data-act="open-worker" data-id="${w.id}" aria-label="${esc(w.name)} 보기">${avatar(w)}</button><div>${head}${state_ ? `<div class="status-line">${state_}</div>` : ""}</div>${side}</div>${bar}<div class="btn-row act-row">${buttons}</div></div>`;
     } else if (a.status === "asked") {
       state_ = `<span class="pill gray">연락함 · 답 기다리는 중</span>`;
