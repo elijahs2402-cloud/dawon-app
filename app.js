@@ -2,7 +2,7 @@
   "use strict";
 
   // 앱 버전(APP_VERSION): 설정 화면 맨 아래에 표시. sw.js의 CACHE 이름과 같이 올림
-  const APP_VERSION = "v50";
+  const APP_VERSION = "v51";
   // 저장소 이름(KEY): 휴대폰 브라우저 안에 자료를 저장할 때 쓰는 이름
   const KEY = "dawon-mobile-v1";
   // 업무 종류(ROLES)
@@ -775,6 +775,43 @@
        <a class="btn" href="${smsHref(w.phone, msg)}" data-act="contacted" data-worker="${w.id}" data-job="${j.id}">${msgLabel}</a>`
     : `<button class="btn" data-act="edit-worker" data-id="${w.id}">${icon("phone")}전화번호 넣기</button>`;
 
+  // 확정된 분 카드의 버튼: main = 지금 할 일 2개, more = [⋯]에 넣을 나머지 { label, ic, act/href, tone }
+  const rowActions = (a, j, w) => {
+    const r = rest(j.restaurantId);
+    const btn = (act, ic, label, extra = "") => `<button class="btn" data-act="${act}" data-id="${a.id}" ${extra}>${icon(ic)}${label}</button>`;
+    const link = (href, ic, label) => `<a class="btn" href="${href}">${icon(ic)}${label}</a>`;
+    const call = w.phone ? link(telHref(w.phone), "phone", "전화") : "";
+    const restItem = r?.phone ? { href: smsHref(r.phone, restMsg(j, w)), ic: "message", label: "식당에 알림" } : { act: "copy-rest-msg", ic: "copy", label: "식당 문자 복사" };
+    const cancelItem = { act: "cancel-ask", ic: "x", label: "확정 취소", tone: "warn" };
+    const fee = Number(a.fee) || 0;
+    if (a.outcome === "done") {
+      const rehireItem = { act: "toggle-rehire", ic: "heart", label: a.rehire ? "'식당이 또 찾음' 지우기" : "식당이 또 찾음" };
+      const undoItem = { act: "undo-assign", ic: "x", label: "출근 취소" };
+      if (fee && !a.paid) return {
+        main: [btn("toggle-paid", "check", "수수료 받음"), w.phone ? link(smsHref(w.phone, feeMsg(w, [{ a, j }])), "message", "수수료 안내") : ""].filter(Boolean),
+        more: [rehireItem, undoItem],
+      };
+      return {
+        main: [`<button class="btn ${a.rehire ? "on" : ""}" data-act="toggle-rehire" data-id="${a.id}">${icon("heart", a.rehire ? "fill" : "")}${a.rehire ? "또 찾음" : "또 찾나요?"}</button>`, call].filter(Boolean),
+        more: [...(fee ? [{ act: "toggle-paid", ic: "x", label: "수수료 받음 취소" }] : []), undoItem],
+      };
+    }
+    const confirmItem = w.phone ? { href: smsHref(w.phone, confirmMsg(j, w)), ic: "message", label: "확정 문자" } : null;
+    // 오늘·지난 일: 출근함이 먼저 / 앞으로의 일: 전화·확정 문자
+    if (j.date <= today()) return {
+      main: [btn("outcome", "check", "출근함", 'data-v="done"'), call].filter(Boolean),
+      more: [confirmItem, restItem, cancelItem].filter(Boolean),
+    };
+    return {
+      main: [call, confirmItem ? link(confirmItem.href, "message", "확정 문자") : ""].filter(Boolean),
+      more: [restItem, cancelItem],
+    };
+  };
+  // 더보기 목록 한 줄 (누르면 목록이 닫히고 그 일을 함)
+  const moreItem = (a) => ({ act, href, ic, label, tone }) => href
+    ? `<a class="menu-row" href="${href}" data-close><span class="menu-ic ${tone || ""}">${icon(ic)}</span><span class="menu-text"><strong>${label}</strong></span></a>`
+    : `<button type="button" class="menu-row" data-act="${act}" data-id="${a.id}" data-close><span class="menu-ic ${tone || ""}">${icon(ic)}</span><span class="menu-text"><strong>${label}</strong></span></button>`;
+
   const assignRow = (a, j) => {
     const w = worker(a.workerId);
     if (!w) return "";
@@ -783,27 +820,16 @@
     let state_ = "";
     let buttons = "";
     let side = ""; // 이름 줄 오른쪽 상태 글자 (토스식: 확정=파랑, 출근함=초록)
-    if (a.status === "confirmed" && a.outcome === "done") {
-      side = `<strong class="row-state ok">출근함</strong>`;
-      // 수수료: 받음 / 미수(며칠 지났는지)
+    if (a.status === "confirmed") {
+      // 확정된 분: 지금 할 일 2개만 크게, 나머지는 [⋯] 더보기 안으로
       const fee = Number(a.fee) || 0;
-      state_ = fee ? `<span class="small">수수료 ${won(fee)} · ${a.paid ? `<span class="paid">${icon("check")}받음</span>` : `<span class="overdue">미수 · ${overdueText(j)}</span>`}</span>` : "";
-      const feeBtns = !fee ? "" : a.paid
-        ? `<button class="btn ghost" data-act="toggle-paid" data-id="${a.id}">받음 취소</button>`
-        : `<button class="btn" data-act="toggle-paid" data-id="${a.id}">${icon("check")}수수료 받음</button>${w.phone ? `<a class="btn" href="${smsHref(w.phone, feeMsg(w, [{ a, j }]))}">${icon("message")}수수료 안내</a>` : ""}`;
-      buttons = `${feeBtns}<button class="btn ${a.rehire ? "on" : ""}" data-act="toggle-rehire" data-id="${a.id}">${a.rehire ? icon("heart", "fill") + "식당이 또 찾음" : icon("heart") + "식당이 또 찾나요?"}</button>
-        <button class="btn ghost" data-act="undo-assign" data-id="${a.id}">출근 취소</button>`;
-    } else if (a.status === "confirmed") {
-      side = `<strong class="row-state">확정</strong>`;
-      // 문자 버튼: 오늘·앞으로의 일 / 출근 체크 버튼: 오늘·지난 일 (오늘은 둘 다)
-      const msgBtns = `${contactButtons(w, j, confirmMsg(j, w), icon("message") + "확정 문자")}
-           ${rest(j.restaurantId)?.phone ? `<a class="btn" href="${smsHref(rest(j.restaurantId).phone, restMsg(j, w))}">${icon("message")}식당에 알림</a>` : `<button class="btn" data-act="copy-rest-msg" data-id="${a.id}">식당 문자 복사</button>`}`;
-      // '안 나옴'은 확정 취소 창 안의 이유로 옮김
-      const outcomeBtns = `<button class="btn" data-act="outcome" data-id="${a.id}" data-v="done">${icon("check")}출근함</button>`;
-      const cancelBtn = `<button class="btn warn" data-act="cancel-ask" data-id="${a.id}">${icon("x")}확정 취소</button>`;
-      if (j.date < today()) buttons = `${outcomeBtns}${cancelBtn}${w.phone ? `<a class="btn" href="${telHref(w.phone)}">${icon("phone")}전화</a>` : ""}`;
-      else if (j.date === today()) buttons = `${msgBtns}${outcomeBtns}${cancelBtn}`;
-      else buttons = `${msgBtns}${cancelBtn}`;
+      if (a.outcome === "done") {
+        side = `<strong class="row-state ok">출근함</strong>`;
+        state_ = fee ? `<span class="small">수수료 ${won(fee)} · ${a.paid ? `<span class="paid">받음</span>` : `<span class="overdue">미수</span>`}</span>` : "";
+      } else side = `<strong class="row-state">확정</strong>`;
+      const { main, more } = rowActions(a, j, w);
+      buttons = `${main.join("")}${more.length ? `<button class="btn more-btn" data-act="more-actions" data-id="${a.id}" aria-label="더보기">⋯</button>` : ""}`;
+      return `<div class="person-row"><div class="who"><button class="avatar-link" data-act="open-worker" data-id="${w.id}" aria-label="${esc(w.name)} 보기">${avatar(w)}</button><div>${head}${state_ ? `<div class="status-line">${state_}</div>` : ""}</div>${side}</div><div class="btn-row act-row">${buttons}</div></div>`;
     } else if (a.status === "asked") {
       state_ = `<span class="pill gray">연락함 · 답 기다리는 중</span>`;
       buttons = `${contactButtons(w, j, offerMsg(j, w))}
@@ -2112,6 +2138,15 @@
     },
     "save-account": () => { state.account = $("#fee-account").value.trim(); refresh(); toast(state.account ? "계좌를 저장했어요" : "계좌를 지웠어요"); },
     "toggle-rehire": (el) => { const a = assign(el.dataset.id); a.rehire = !a.rehire; refresh(); },
+    // 확정된 분 카드의 [⋯] 더보기: 가끔 쓰는 일을 아래에서 올라오는 목록으로
+    "more-actions": (el) => {
+      const a = assign(el.dataset.id);
+      const j = a && job(a.jobId);
+      const w = a && worker(a.workerId);
+      if (!j || !w) return;
+      const { more } = rowActions(a, j, w);
+      openSheet({ title: `${w.name}님`, body: `<div class="menu more-menu">${more.map(moreItem(a)).join("")}</div>` });
+    },
     "copy-rest-msg": (el) => { const a = assign(el.dataset.id); copyText(restMsg(job(a.jobId), worker(a.workerId))); },
     "show-more": (el) => { ui.showAll[el.dataset.id] = true; render(); },
     "jobs-mode": (el) => { ui.jobsMode = el.dataset.v; render(); },

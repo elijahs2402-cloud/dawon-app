@@ -540,3 +540,12 @@ body { overflow-x: hidden; }
 .work-time strong { color: var(--pri); }
 /* '3일 지남'이 두 줄로 끊기지 않게 */
 .fee-owed .history .overdue { white-space: nowrap; }
+/* 확정된 분 카드: 버튼 2개 + [⋯] 한 줄 */
+.btn-row.act-row { flex-wrap: nowrap; }
+.btn-row.act-row > * { flex: 1 1 0; min-width: 0; padding: 0 10px; white-space: nowrap; }
+.btn-row.act-row > .more-btn { flex: 0 0 52px; padding: 0; font-size: 1.4rem; font-weight: 800; letter-spacing: .05em; color: var(--sub); }
+/* 더보기 목록: 입력창 안에서는 바탕과 붙여서 */
+.more-menu { margin: 0 -8px; padding: 0; }
+.more-menu .menu-row::after { display: none; }
+a.menu-row { text-decoration: none; color: inherit; }
+a.menu-row strong { color: var(--ink); }
