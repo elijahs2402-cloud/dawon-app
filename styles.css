@@ -561,7 +561,6 @@ a.menu-row strong { color: var(--ink); }
 .backup-line strong { color: var(--warn); text-decoration: underline; text-underline-offset: 3px; }
 .backup-line .ic { width: 18px; height: 18px; flex: none; }
 .backup-line:active { transform: scale(.98); }
-.more-jobs { margin-top: -2px; }
 
 /* 앱 스타일 확인 창 (지우기·불러오기 등) */
 .ask { width: calc(100% - 40px); max-width: 400px; padding: 0; border: 0; border-radius: 24px; background: var(--card); color: var(--ink2); box-shadow: 0 20px 60px rgba(0, 0, 0, .18); }

@@ -2,7 +2,7 @@
   "use strict";
 
   // 앱 버전(APP_VERSION): 설정 화면 맨 아래에 표시. sw.js의 CACHE 이름과 같이 올림
-  const APP_VERSION = "v64";
+  const APP_VERSION = "v65";
   // 저장소 이름(KEY): 휴대폰 브라우저 안에 자료를 저장할 때 쓰는 이름
   const KEY = "dawon-mobile-v1";
   // 업무 종류(ROLES)
@@ -569,7 +569,7 @@
   // navDir: 화면 움직임 방향 (forward = 오른쪽에서 들어옴, back = 왼쪽에서, tab = 아래에서 차례로). 처음 열 때는 tab
   let navDir = "tab";
   const isDetail = (r) => r.name === "job" || r.name === "worker";
-  const ui = { peopleMode: "workers", peopleQuery: "", peopleRole: "", jobsMode: "upcoming", showAll: {}, showAllNeed: false };
+  const ui = { peopleMode: "workers", peopleQuery: "", peopleRole: "", jobsMode: "upcoming", showAll: {} };
   // 뒤로가기 기록 규칙 (토스 방식)
   // - 홈이 맨 아래(depth 0), 하단 탭 화면은 그 바로 위(depth 1) 한 칸만 씀 → 휴대폰 뒤로가기: 탭 → 홈 → 앱 나가기
   // - 일감 보기·사람 보기는 그 위로 한 칸씩 쌓임
@@ -770,19 +770,17 @@
     if (working.length) {
       html += `<h2>지금 일하는 중 <span class="count">${working.length}</span></h2><div class="card">${working.map(workRow).join("")}</div>`;
     }
-    // 다가오는 일: 사람이 필요한 일(날짜순) 먼저, 그다음 오늘·내일 인원이 다 찬 일. 앞의 3개만, 나머지는 [더 보기]
-    const NEED_SHOW = 3;
+    // 다가오는 일: 사람이 필요한 일 + 오늘·내일 인원이 다 찬 일을 모두 보여줌 (접기 없음)
     // 날짜순, 같은 날에서는 사람이 필요한 일 먼저 → 시간순. 날짜가 바뀔 때마다 날짜 제목
     const upcoming = [...needJobs, ...fullJobs].sort((a, b) => a.date.localeCompare(b.date) || (jobNeed(a) ? 0 : 1) - (jobNeed(b) ? 0 : 1) || (a.start || "").localeCompare(b.start || ""));
     html += `<h2>다가오는 일 <span class="count">${upcoming.length}</span></h2>`;
     if (upcoming.length) {
       let lastDate = "";
-      (ui.showAllNeed ? upcoming : upcoming.slice(0, NEED_SHOW)).forEach((j) => {
+      upcoming.forEach((j) => {
         if (j.date !== lastDate) { html += `<div class="day-head">${esc(dateText(j.date))}</div>`; lastDate = j.date; }
         html += jobCard(j, true);
       });
     } else html += `<div class="empty">다가오는 일이 없어요. 식당에서 연락이 오면 [일감 받기]를 누르세요.</div>`;
-    if (upcoming.length > NEED_SHOW) html += `<button class="btn big more-jobs" data-act="toggle-need">${ui.showAllNeed ? "접기" : `${upcoming.length - NEED_SHOW}건 더 보기`}</button>`;
     // 받을 수수료 (아직 입금 확인 안 된 것)
     const owed = unpaidByWorker();
     if (owed.length) {
@@ -2187,8 +2185,6 @@
       toast(w.trust ? `'${MANUAL_TRUST[w.trust].label}'${hasBatchim(MANUAL_TRUST[w.trust].label) ? "으로" : "로"} 정했어요` : "기록을 보고 자동으로 정해요");
     },
     "save-account": () => { state.account = $("#fee-account").value.trim(); refresh(); toast(state.account ? "계좌를 저장했어요" : "계좌를 지웠어요"); },
-    // 홈 '사람이 필요해요' 더 보기 / 접기
-    "toggle-need": () => { ui.showAllNeed = !ui.showAllNeed; render(); },
     "toggle-rehire": (el) => { const a = assign(el.dataset.id); a.rehire = !a.rehire; refresh(); },
     // 실제 근무 시간 고치기: 약속보다 더/덜 일했을 때 그 사람만 일당·수수료 다시 계산
     "actual-time": (el) => {
