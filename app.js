@@ -2,7 +2,7 @@
   "use strict";
 
   // 앱 버전(APP_VERSION): 설정 화면 맨 아래에 표시. sw.js의 CACHE 이름과 같이 올림
-  const APP_VERSION = "v62";
+  const APP_VERSION = "v63";
   // 저장소 이름(KEY): 휴대폰 브라우저 안에 자료를 저장할 때 쓰는 이름
   const KEY = "dawon-mobile-v1";
   // 업무 종류(ROLES)
@@ -769,19 +769,18 @@
     if (working.length) {
       html += `<h2>지금 일하는 중 <span class="count">${working.length}</span></h2><div class="card">${working.map(workRow).join("")}</div>`;
     }
-    // 사람이 필요한 일: 가까운 3개만, 나머지는 [더 보기]
+    // 다가오는 일: 사람이 필요한 일(날짜순) 먼저, 그다음 오늘·내일 인원이 다 찬 일. 앞의 3개만, 나머지는 [더 보기]
     const NEED_SHOW = 3;
-    html += `<h2>사람이 필요해요 <span class="count">${needJobs.length}</span></h2>`;
-    html += needJobs.length ? (ui.showAllNeed ? needJobs : needJobs.slice(0, NEED_SHOW)).map(jobCard).join("") : `<div class="empty">빈자리가 없어요. 식당에서 연락이 오면 [일감 받기]를 누르세요.</div>`;
-    if (needJobs.length > NEED_SHOW) html += `<button class="btn big more-jobs" data-act="toggle-need">${ui.showAllNeed ? "접기" : `${needJobs.length - NEED_SHOW}건 더 보기`}</button>`;
+    const upcoming = [...needJobs, ...fullJobs];
+    html += `<h2>다가오는 일 <span class="count">${upcoming.length}</span></h2>`;
+    html += upcoming.length ? (ui.showAllNeed ? upcoming : upcoming.slice(0, NEED_SHOW)).map(jobCard).join("") : `<div class="empty">다가오는 일이 없어요. 식당에서 연락이 오면 [일감 받기]를 누르세요.</div>`;
+    if (upcoming.length > NEED_SHOW) html += `<button class="btn big more-jobs" data-act="toggle-need">${ui.showAllNeed ? "접기" : `${upcoming.length - NEED_SHOW}건 더 보기`}</button>`;
     // 받을 수수료 (아직 입금 확인 안 된 것)
     const owed = unpaidByWorker();
     if (owed.length) {
       html += `<h2>받을 수수료 <span class="count">${won(feeSumOf(owed.flat()))}</span></h2><div class="card">${owed.map(feeRow).join("")}
         ${state.account ? "" : `<p class="hint" style="margin-top:12px">설정에 계좌번호를 적어 두면 수수료 안내 문자에 같이 들어가요.</p>`}</div>`;
     }
-    html += `<h2>오늘·내일 확정된 일</h2>`;
-    html += fullJobs.length ? fullJobs.map(jobCard).join("") : `<div class="empty">아직 없어요. 사람을 다 채운 일감이 여기에 모여요.</div>`;
     // 이번 달: 출근 완료 / 받은 수수료 / 받을 수수료
     const paidSum = doneThisMonth.filter((a) => a.paid).reduce((sum, a) => sum + (Number(a.fee) || 0), 0);
     const owedSum = feeSum - paidSum;
