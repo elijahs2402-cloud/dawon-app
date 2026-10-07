@@ -2,7 +2,7 @@
   "use strict";
 
   // 앱 버전(APP_VERSION): 설정 화면 맨 아래에 표시. sw.js의 CACHE 이름과 같이 올림
-  const APP_VERSION = "v65";
+  const APP_VERSION = "v66";
   // 저장소 이름(KEY): 휴대폰 브라우저 안에 자료를 저장할 때 쓰는 이름
   const KEY = "dawon-mobile-v1";
   // 업무 종류(ROLES)
@@ -312,7 +312,7 @@
   const assign = (id) => state.assigns.find((a) => a.id === id);
   const assignsOf = (jobId) => state.assigns.filter((a) => a.jobId === jobId);
   const confirmedOf = (j) => assignsOf(j.id).filter((a) => a.status === "confirmed");
-  const jobNeed = (j) => Math.max(0, Number(j.headcount || 1) - confirmedOf(j).length);
+  const jobNeed = (j) => (j.canceled ? 0 : Math.max(0, Number(j.headcount || 1) - confirmedOf(j).length));
   const restName = (j) => rest(j.restaurantId)?.name || "식당 미정";
 
   // ---------- 약속 기록과 신뢰도 ----------
@@ -630,11 +630,11 @@
     const conf = confirmedOf(j).length;
     const past = j.date < today();
     const g = groupOf(j);
-    return `<button class="job-card ${need ? "need" : "full"} ${past ? "past" : ""}" data-act="open-job" data-id="${j.id}">
+    return `<button class="job-card ${j.canceled ? "canceled" : need ? "need" : "full"} ${past || j.canceled ? "past" : ""}" data-act="open-job" data-id="${j.id}">
       <div class="job-when">${noDate ? "" : `${esc(dateText(j.date))} · `}${esc(j.start)}~${esc(j.end)}${g.length > 1 ? ` <span class="pill gray">${g.length}일${isRun(g) ? " 연속" : ""} · ${g.indexOf(j) + 1}일째</span>` : ""}</div>
       <div class="job-what"><strong>${esc(restName(j))}</strong><span class="role">${esc(j.role)}</span></div>
-      <div class="job-state">${need ? `<span class="pill need">${need}명 더 필요</span>` : `<span class="pill ok">인원 다 참</span>`}
-      <span class="muted">확정 ${conf}/${esc(j.headcount)}명</span></div></button>`;
+      <div class="job-state">${j.canceled ? `<span class="pill gray">식당 취소</span>` : need ? `<span class="pill need">${need}명 더 필요</span>` : `<span class="pill ok">인원 다 참</span>`}
+      ${j.canceled ? "" : `<span class="muted">확정 ${conf}/${esc(j.headcount)}명</span>`}</div></button>`;
   };
   const sortJobs = (a, b) => a.date.localeCompare(b.date) || (a.start || "").localeCompare(b.start || "");
   // 여러 날 일감 묶음: 같은 group 번호를 가진 일감들 (날짜순). 묶음이 아니면 자기 하나
@@ -732,8 +732,8 @@
 
   const renderHome = () => {
     const hasData = state.workers.length || state.jobs.length;
-    const needJobs = state.jobs.filter((j) => j.date >= today() && jobNeed(j) > 0).sort(sortJobs);
-    const fullJobs = state.jobs.filter((j) => (j.date === today() || j.date === today(1)) && jobNeed(j) === 0).sort(sortJobs);
+    const needJobs = state.jobs.filter((j) => !j.canceled && j.date >= today() && jobNeed(j) > 0).sort(sortJobs);
+    const fullJobs = state.jobs.filter((j) => !j.canceled && (j.date === today() || j.date === today(1)) && jobNeed(j) === 0).sort(sortJobs);
     const checks = pendingChecks();
     const month = today().slice(0, 7);
     const doneThisMonth = state.assigns.filter((a) => a.outcome === "done" && job(a.jobId)?.date.startsWith(month));
@@ -933,6 +933,16 @@
       <button class="map-link add-role" data-act="add-role" data-id="${j.id}">${icon("plus")}같은 식당·날짜로 업무 추가</button>
     </div>`;
 
+    if (j.canceled) {
+      // 식당이 취소한 일감: 취소된 분들에게 안내 문자 보내기
+      const hit = assignsOf(j.id).filter((a) => a.outcome === "rest_cancel").map((a) => worker(a.workerId)).filter(Boolean);
+      html += `<div class="banner warn">${icon("alert")}식당 사정으로 취소된 일감이에요${j.canceledAt ? ` (${esc(shortDate(j.canceledAt))} 취소)` : ""}</div>`;
+      html += hit.length
+        ? `<h2>취소 안내 보내기 <span class="count">${hit.length}</span></h2><div class="card">${hit.map((w) => cancelRow(w, [j])).join("")}</div>`
+        : `<div class="empty">확정·연락했던 분이 없어서 안내할 사람이 없어요.</div>`;
+      html += `<div class="danger-zone"><button class="link-btn" data-act="del-job" data-id="${j.id}">이 일감 지우기</button></div>`;
+      return html;
+    }
     if (need) html += `<div class="banner need">${need}명 더 필요해요</div>`;
     else html += `<div class="banner ok">${icon("check")}인원이 다 찼어요</div>`;
 
@@ -955,9 +965,21 @@
       html += `<div class="card">${cands.slice(0, limit).map((c) => candidateRow(c, j, need === 0)).join("")}</div>`;
       if (cands.length > limit) html += `<button class="btn big" data-act="show-more" data-id="${j.id}">${cands.length - limit}명 더 보기</button>`;
     }
-    html += `<div class="danger-zone"><button class="link-btn" data-act="del-job" data-id="${j.id}">이 일감 지우기</button></div>`;
+    html += `<div class="danger-zone"><button class="btn big warn" data-act="rest-cancel" data-id="${j.id}">${icon("x")}식당이 취소했어요</button>
+      <button class="link-btn" data-act="del-job" data-id="${j.id}">이 일감 지우기</button></div>`;
     return html;
   };
+  // 식당 취소 안내 문자: 취소된 날짜들을 한 통에
+  const cancelNoticeMsg = (w, jobs) => letter(
+    `[다원] ${w.name}님, 죄송해요.`,
+    section("취소된 일", ...jobs.map((j) => `${shortDate(j.date)} ${restName(j)} ${j.role}\n${korRange(j)}`)),
+    "식당 사정으로 일이 취소됐어요.\n다음 일 먼저 챙겨드릴게요.",
+  );
+  // 취소 안내 한 줄: 사진·이름 + [취소 안내 문자]
+  const cancelRow = (w, jobs) => `<div class="check-row">
+      <div class="who"><button class="avatar-link" data-act="open-worker" data-id="${w.id}" aria-label="${esc(w.name)} 보기">${avatar(w)}</button><div><button class="name-link" data-act="open-worker" data-id="${w.id}">${esc(w.name)}</button>
+      <div class="muted small">${jobs.map((j) => esc(shortDate(j.date))).join(", ")} 취소</div></div></div>
+      <div class="btn-row">${w.phone ? `<a class="btn" href="${smsHref(w.phone, cancelNoticeMsg(w, jobs))}">${icon("message")}취소 안내 문자</a><a class="btn" href="${telHref(w.phone)}">${icon("phone")}전화</a>` : `<button class="btn" data-act="edit-worker" data-id="${w.id}">${icon("phone")}전화번호 넣기</button>`}</div></div>`;
 
   // ---------- 화면: 사람/식당 목록 ----------
   const peopleList = () => {
@@ -2252,6 +2274,46 @@
       sheet.close();
       refresh();
       toast("약속 시간으로 되돌렸어요");
+    },
+    // 식당이 취소했어요: 이 날만 / 남은 날 모두 → 확정·연락한 분을 한 번에 '식당 사정 취소' → 취소 안내 문자
+    "rest-cancel": async (el) => {
+      const j = job(el.dataset.id);
+      if (!j) return;
+      const later = groupOf(j).filter((x) => x.date >= j.date && !x.canceled);
+      const doCancel = (targets) => {
+        const hit = new Map(); // 사람별 취소된 일감들
+        targets.forEach((x) => {
+          x.canceled = true;
+          x.canceledAt = today();
+          assignsOf(x.id).filter((a) => a.status === "confirmed" || a.status === "asked").forEach((a) => {
+            setOutcome(a, "rest_cancel");
+            const w = worker(a.workerId);
+            if (w) { if (!hit.has(w.id)) hit.set(w.id, { w, jobs: [] }); hit.get(w.id).jobs.push(x); }
+          });
+        });
+        refresh();
+        // 바로 안내 문자를 보낼 수 있게 목록을 띄움
+        const list = [...hit.values()];
+        openSheet({
+          title: "식당 취소로 표시했어요",
+          body: list.length
+            ? `<p>취소된 분들에게 안내 문자를 보내 주세요. 기록에 불이익은 없어요.</p><div class="card" style="padding:16px">${list.map(({ w, jobs }) => cancelRow(w, jobs)).join("")}</div>`
+            : `<p>확정·연락했던 분이 없어서 안내할 사람이 없어요.</p>`,
+        });
+      };
+      if (later.length > 1) {
+        openSheet({
+          title: "식당이 취소했어요",
+          body: `<p>어느 날을 취소할까요?</p><div class="choice-list">
+            <label class="choice"><input type="radio" name="scope" value="one" checked /><span><strong>이 날만</strong><small>${esc(shortDate(j.date))}</small></span></label>
+            <label class="choice"><input type="radio" name="scope" value="all" /><span><strong>남은 날 모두</strong><small>${later.map((x) => esc(shortDate(x.date))).join(", ")} (${later.length}일)</small></span></label></div>`,
+          submit: "취소로 표시",
+          onSubmit: (fd) => { doCancel(val(fd, "scope") === "all" ? later : [j]); return false; },
+        });
+        return;
+      }
+      if (!(await ask({ title: "식당이 취소했나요?", text: `${shortDate(j.date)} ${restName(j)} ${j.role}\n확정·연락한 분들은 '식당 사정 취소'로 바뀌고, 기록에 불이익은 없어요.`, ok: "취소로 표시", danger: true }))) return;
+      doCancel([j]);
     },
     // 확정된 분 카드의 [⋯] 더보기: 가끔 쓰는 일을 아래에서 올라오는 목록으로
     "more-actions": (el) => {

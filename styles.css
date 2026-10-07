@@ -367,7 +367,7 @@ legend { padding: 0; margin-bottom: 8px; font-weight: 700; font-size: .9rem; col
 .fee-card .btn { min-height: 46px; padding: 0 14px; }
 
 /* ---------- 화면 움직임 ---------- */
-body { overflow-x: hidden; }
+html, body { overflow-x: clip; } /* 화면이 옆에서 들어오는 움직임이 페이지 폭을 넓히지 않게 (넓어지면 휴대폰에서 화면이 작아지거나 입력창이 잘림) */
 #screen.enter-forward { animation: from-right .34s var(--ease) both; }
 #screen.enter-back { animation: from-left .34s var(--ease) both; }
 #screen.enter-tab > * { animation: rise .46s var(--ease) both; animation-delay: calc(var(--i, 0) * 38ms); }
