@@ -600,3 +600,6 @@ button, a.btn, .chip, .tabbar button, .menu-row, .job-card, .worker-card, .segme
 .tabbar button.active svg .ol { display: none; }
 .tabbar button.active svg path.fl { fill: currentColor; }   /* 홈: 문을 넓힌 채움 모양 */
 .tabbar button.active svg .hole-big { fill: #fff; stroke: none; }   /* 설정: 큰 흰 원 */
+/* 홈 '다가오는 일'의 날짜 제목 */
+.day-head { margin: 22px 4px 10px; font-size: .95rem; font-weight: 800; color: var(--sub); }
+h2 + .day-head { margin-top: 4px; }

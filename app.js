@@ -2,7 +2,7 @@
   "use strict";
 
   // 앱 버전(APP_VERSION): 설정 화면 맨 아래에 표시. sw.js의 CACHE 이름과 같이 올림
-  const APP_VERSION = "v63";
+  const APP_VERSION = "v64";
   // 저장소 이름(KEY): 휴대폰 브라우저 안에 자료를 저장할 때 쓰는 이름
   const KEY = "dawon-mobile-v1";
   // 업무 종류(ROLES)
@@ -624,13 +624,14 @@
   history.replaceState(route, "");
 
   // ---------- 화면: 홈 ----------
-  const jobCard = (j) => {
+  // noDate: 날짜 제목 아래에 놓일 때는 카드 안 날짜를 빼고 시간만
+  const jobCard = (j, noDate = false) => {
     const need = jobNeed(j);
     const conf = confirmedOf(j).length;
     const past = j.date < today();
     const g = groupOf(j);
     return `<button class="job-card ${need ? "need" : "full"} ${past ? "past" : ""}" data-act="open-job" data-id="${j.id}">
-      <div class="job-when">${esc(dateText(j.date))} · ${esc(j.start)}~${esc(j.end)}${g.length > 1 ? ` <span class="pill gray">${g.length}일${isRun(g) ? " 연속" : ""} · ${g.indexOf(j) + 1}일째</span>` : ""}</div>
+      <div class="job-when">${noDate ? "" : `${esc(dateText(j.date))} · `}${esc(j.start)}~${esc(j.end)}${g.length > 1 ? ` <span class="pill gray">${g.length}일${isRun(g) ? " 연속" : ""} · ${g.indexOf(j) + 1}일째</span>` : ""}</div>
       <div class="job-what"><strong>${esc(restName(j))}</strong><span class="role">${esc(j.role)}</span></div>
       <div class="job-state">${need ? `<span class="pill need">${need}명 더 필요</span>` : `<span class="pill ok">인원 다 참</span>`}
       <span class="muted">확정 ${conf}/${esc(j.headcount)}명</span></div></button>`;
@@ -771,9 +772,16 @@
     }
     // 다가오는 일: 사람이 필요한 일(날짜순) 먼저, 그다음 오늘·내일 인원이 다 찬 일. 앞의 3개만, 나머지는 [더 보기]
     const NEED_SHOW = 3;
-    const upcoming = [...needJobs, ...fullJobs];
+    // 날짜순, 같은 날에서는 사람이 필요한 일 먼저 → 시간순. 날짜가 바뀔 때마다 날짜 제목
+    const upcoming = [...needJobs, ...fullJobs].sort((a, b) => a.date.localeCompare(b.date) || (jobNeed(a) ? 0 : 1) - (jobNeed(b) ? 0 : 1) || (a.start || "").localeCompare(b.start || ""));
     html += `<h2>다가오는 일 <span class="count">${upcoming.length}</span></h2>`;
-    html += upcoming.length ? (ui.showAllNeed ? upcoming : upcoming.slice(0, NEED_SHOW)).map(jobCard).join("") : `<div class="empty">다가오는 일이 없어요. 식당에서 연락이 오면 [일감 받기]를 누르세요.</div>`;
+    if (upcoming.length) {
+      let lastDate = "";
+      (ui.showAllNeed ? upcoming : upcoming.slice(0, NEED_SHOW)).forEach((j) => {
+        if (j.date !== lastDate) { html += `<div class="day-head">${esc(dateText(j.date))}</div>`; lastDate = j.date; }
+        html += jobCard(j, true);
+      });
+    } else html += `<div class="empty">다가오는 일이 없어요. 식당에서 연락이 오면 [일감 받기]를 누르세요.</div>`;
     if (upcoming.length > NEED_SHOW) html += `<button class="btn big more-jobs" data-act="toggle-need">${ui.showAllNeed ? "접기" : `${upcoming.length - NEED_SHOW}건 더 보기`}</button>`;
     // 받을 수수료 (아직 입금 확인 안 된 것)
     const owed = unpaidByWorker();
@@ -798,7 +806,7 @@
     if (!upcoming) list.reverse();
     return `<button class="btn primary big" data-act="new-job">${icon("plus")}일감 받기</button>
       <div class="segment" style="margin-top:14px"><button class="${upcoming ? "active" : ""}" data-act="jobs-mode" data-v="upcoming">오늘부터</button><button class="${upcoming ? "" : "active"}" data-act="jobs-mode" data-v="past">지난 일감</button></div>
-      ${list.length ? list.map(jobCard).join("") : `<div class="empty">${upcoming ? "예정된 일감이 없어요" : "지난 일감이 없어요"}</div>`}`;
+      ${list.length ? list.map((j) => jobCard(j)).join("") : `<div class="empty">${upcoming ? "예정된 일감이 없어요" : "지난 일감이 없어요"}</div>`}`;
   };
 
   // ---------- 화면: 일감 하나 ----------
