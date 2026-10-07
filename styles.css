@@ -602,3 +602,7 @@ button, a.btn, .chip, .tabbar button, .menu-row, .job-card, .worker-card, .segme
 /* 홈 '다가오는 일'의 날짜 제목 */
 .day-head { margin: 22px 4px 10px; font-size: .95rem; font-weight: 800; color: var(--sub); }
 h2 + .day-head { margin-top: 4px; }
+/* 식당 취소 팝업: 안내 글 + [모두 선택] 한 줄 */
+.pick-all-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+.pick-all-row p { margin: 0; }
+.pick-all-row .btn { flex: none; white-space: nowrap; }

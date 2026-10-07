@@ -2,7 +2,7 @@
   "use strict";
 
   // 앱 버전(APP_VERSION): 설정 화면 맨 아래에 표시. sw.js의 CACHE 이름과 같이 올림
-  const APP_VERSION = "v66";
+  const APP_VERSION = "v67";
   // 저장소 이름(KEY): 휴대폰 브라우저 안에 자료를 저장할 때 쓰는 이름
   const KEY = "dawon-mobile-v1";
   // 업무 종류(ROLES)
@@ -2279,7 +2279,8 @@
     "rest-cancel": async (el) => {
       const j = job(el.dataset.id);
       if (!j) return;
-      const later = groupOf(j).filter((x) => x.date >= j.date && !x.canceled);
+      // 고를 수 있는 날: 아직 취소 안 된 날 중 오늘 이후 (지금 연 날은 항상 포함)
+      const days = groupOf(j).filter((x) => !x.canceled && (x.date >= today() || x.id === j.id));
       const doCancel = (targets) => {
         const hit = new Map(); // 사람별 취소된 일감들
         targets.forEach((x) => {
@@ -2301,14 +2302,30 @@
             : `<p>확정·연락했던 분이 없어서 안내할 사람이 없어요.</p>`,
         });
       };
-      if (later.length > 1) {
+      if (days.length > 1) {
+        // 날짜마다 체크: 지금 연 날만 미리 체크, [모두 선택]으로 한 번에
+        const dayInfo = (x) => {
+          const names = confirmedOf(x).map((a) => worker(a.workerId)?.name).filter(Boolean);
+          return `${esc(x.role)} · ${names.length ? esc(names.join(", ")) : "확정된 분 없음"}`;
+        };
         openSheet({
           title: "식당이 취소했어요",
-          body: `<p>어느 날을 취소할까요?</p><div class="choice-list">
-            <label class="choice"><input type="radio" name="scope" value="one" checked /><span><strong>이 날만</strong><small>${esc(shortDate(j.date))}</small></span></label>
-            <label class="choice"><input type="radio" name="scope" value="all" /><span><strong>남은 날 모두</strong><small>${later.map((x) => esc(shortDate(x.date))).join(", ")} (${later.length}일)</small></span></label></div>`,
+          body: `<div class="pick-all-row"><p>취소할 날을 모두 골라 주세요.</p><button type="button" class="btn" data-cancel-all>모두 선택</button></div>
+            <div class="choice-list">${days.map((x) => `<label class="choice"><input type="checkbox" name="day" value="${x.id}" ${x.id === j.id ? "checked" : ""} /><span><strong>${esc(shortDate(x.date))}</strong><small>${dayInfo(x)}</small></span></label>`).join("")}</div>`,
           submit: "취소로 표시",
-          onSubmit: (fd) => { doCancel(val(fd, "scope") === "all" ? later : [j]); return false; },
+          onReady: (form) => {
+            const allBtn = form.querySelector("[data-cancel-all]");
+            const boxes = [...form.querySelectorAll("input[name=day]")];
+            const sync = () => { allBtn.textContent = boxes.every((b) => b.checked) ? "모두 해제" : "모두 선택"; };
+            allBtn.addEventListener("click", () => { const on = !boxes.every((b) => b.checked); boxes.forEach((b) => { b.checked = on; }); sync(); });
+            boxes.forEach((b) => b.addEventListener("change", sync));
+          },
+          onSubmit: (fd) => {
+            const picked = fd.getAll("day").map(String);
+            if (!picked.length) { toast("취소할 날을 골라 주세요"); return false; }
+            doCancel(days.filter((x) => picked.includes(x.id)));
+            return false;
+          },
         });
         return;
       }
