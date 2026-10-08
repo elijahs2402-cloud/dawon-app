@@ -2,7 +2,7 @@
   "use strict";
 
   // 앱 버전(APP_VERSION): 설정 화면 맨 아래에 표시. sw.js의 CACHE 이름과 같이 올림
-  const APP_VERSION = "v67";
+  const APP_VERSION = "v68";
   // 저장소 이름(KEY): 휴대폰 브라우저 안에 자료를 저장할 때 쓰는 이름
   const KEY = "dawon-mobile-v1";
   // 업무 종류(ROLES)
@@ -535,6 +535,40 @@
   };
   // 휴대폰 뒤로 가기·Esc로 닫을 때도 같은 움직임
   sheet.addEventListener("cancel", (e) => { e.preventDefault(); sheet.close(); });
+  // 손잡이(제목 줄)를 아래로 끌어 닫기: 충분히 내리거나 빠르게 튕기면 닫히고, 아니면 제자리로
+  let drag = null;
+  sheetForm.addEventListener("pointerdown", (e) => {
+    const head = e.target.closest(".sheet-head");
+    if (!head || e.target.closest("button") || closeTimer) return;
+    drag = { y: e.clientY, t: performance.now(), dy: 0, id: e.pointerId };
+    head.setPointerCapture(e.pointerId);
+    sheet.style.transition = "none"; // translate는 올라오는·내려가는 움직임(transform)과 따로 움직여서 서로 안 겹침
+  });
+  sheetForm.addEventListener("pointermove", (e) => {
+    if (!drag || e.pointerId !== drag.id) return;
+    drag.dy = Math.max(0, e.clientY - drag.y);
+    sheet.style.translate = `0 ${drag.dy}px`;
+  });
+  const endDrag = (e) => {
+    if (!drag || e.pointerId !== drag.id) return;
+    const { dy, t } = drag;
+    drag = null;
+    const fast = dy / Math.max(1, performance.now() - t) > 0.6; // 빠르게 튕겨 내림 (1초에 600px 이상)
+    sheet.style.transition = "translate .2s cubic-bezier(.4, 0, 1, 1)";
+    if (dy > 110 || (fast && dy > 30)) {
+      sheet.style.translate = "0 100%";
+      closeTimer = setTimeout(() => {
+        closeTimer = null;
+        nativeClose.call(sheet);
+        sheet.style.translate = sheet.style.transition = "";
+      }, 200);
+    } else {
+      sheet.style.translate = "";
+      setTimeout(() => { sheet.style.transition = ""; }, 200);
+    }
+  };
+  sheetForm.addEventListener("pointerup", endDrag);
+  sheetForm.addEventListener("pointercancel", endDrag);
   const openSheet = ({ title, body, submit = "저장", onSubmit, onReady }) => {
     // 닫히는 중에 새 창을 열면 닫기를 취소하고 내용만 바꿈
     if (closeTimer) { clearTimeout(closeTimer); closeTimer = null; sheet.classList.remove("closing"); }
@@ -759,6 +793,11 @@
         <p class="muted small">먼저 연습해 보고 싶으면 아래 '설정' 메뉴에서 연습용 예시 자료를 넣을 수 있어요.</p></div>`;
       return html;
     }
+    // 받을 수수료 요약: 맨 위에 한 줄 (누르면 아래 목록으로 내려감)
+    const owed = unpaidByWorker();
+    if (owed.length) {
+      html += `<button class="fee-line" data-act="go-fee"><span>받을 수수료 <strong>${won(feeSumOf(owed.flat()))}</strong> · ${owed.length}명</span><span class="go">보기</span></button>`;
+    }
     // 백업 안내: 한 줄로 작게
     if (backupDays === null || backupDays >= 7) {
       html += `<button class="backup-line" data-act="backup">${icon("download")}<span>${backupDays === null ? "아직 백업을 안 했어요" : `백업한 지 ${backupDays}일 지났어요`}</span><strong>백업하기</strong></button>`;
@@ -782,9 +821,8 @@
       });
     } else html += `<div class="empty">다가오는 일이 없어요. 식당에서 연락이 오면 [일감 받기]를 누르세요.</div>`;
     // 받을 수수료 (아직 입금 확인 안 된 것)
-    const owed = unpaidByWorker();
     if (owed.length) {
-      html += `<h2>받을 수수료 <span class="count">${won(feeSumOf(owed.flat()))}</span></h2><div class="card">${owed.map(feeRow).join("")}
+      html += `<h2 id="fee-sec">받을 수수료 <span class="count">${won(feeSumOf(owed.flat()))}</span></h2><div class="card">${owed.map(feeRow).join("")}
         ${state.account ? "" : `<p class="hint" style="margin-top:12px">설정에 계좌번호를 적어 두면 수수료 안내 문자에 같이 들어가요.</p>`}</div>`;
     }
     // 이번 달: 출근 완료 / 받은 수수료 / 받을 수수료
@@ -895,7 +933,7 @@
       <div class="who"><button class="avatar-link" data-act="open-worker" data-id="${w.id}" aria-label="${esc(w.name)} 보기">${avatar(w)}</button><div>
       <div class="name-line"><button class="name-link" data-act="open-worker" data-id="${w.id}">${esc(w.name)}</button>${badge(t)}${near ? `<span class="tag">가까움</span>` : ""}${busy ? `<span class="tag warn">같은 시간 다른 일</span>` : ""}</div></div></div>
       <div class="btn-row">${contactButtons(w, j, offerMsg(j, w), icon("message") + "일 제안")}
-        <button class="btn primary" data-act="add-assign" data-v="confirmed" data-worker="${w.id}" data-job="${j.id}" ${full || busy ? "disabled" : ""}>${icon("check")}확정</button>
+        <button class="btn soft" data-act="add-assign" data-v="confirmed" data-worker="${w.id}" data-job="${j.id}" ${full || busy ? "disabled" : ""}>${icon("check")}확정</button>
       </div></div>`;
   };
 
@@ -915,22 +953,17 @@
       ${groupOf(j).length > 1 ? `<div class="day-tabs" aria-label="연속 근무 날짜">${groupOf(j).map((x, i) => `<button class="day-tab ${x.id === j.id ? "on" : ""}" data-act="open-job" data-id="${x.id}"><small>${i + 1}일째</small>${esc(dateText(x.date).replace(/^(오늘|내일|어제) /, ""))}</button>`).join("")}</div>` : ""}
       ${reqOf(j).length > 1 ? `<div class="day-tabs role-tabs" aria-label="같은 요청 업무">${reqOf(j).map((x) => `<button class="day-tab ${x.id === j.id ? "on" : ""}" data-act="open-job" data-id="${x.id}"><small>${x.start}~</small>${esc(x.role)} ${x.headcount}명</button>`).join("")}</div>` : ""}
       <div class="facts">
-        <div class="fact"><small>시간</small><strong>${esc(j.start)}~${esc(j.end)}</strong></div>
-        <div class="fact"><small>근무${j.breakMin ? ` (휴게 ${hoursText(Number(j.breakMin))})` : ""}</small><strong>${hoursText(workMinutes(j.start, j.end, j.breakMin))}</strong></div>
-        ${j.hourly ? `<div class="fact"><small>시급</small><strong>${esc(won(j.hourly))}${hasNightRate(j) ? `<span class="night-rate">밤 ${esc(won(j.nightHourly))}</span>` : ""}</strong></div>` : ""}
-        <div class="fact"><small>일당${j.hourly ? " (총)" : ""}</small><strong>${esc(won(j.pay))}</strong></div>
-        <div class="fact"><small>필요 인원</small><strong>${esc(j.headcount)}명</strong></div>
-        <div class="fact"><small>지역</small><strong>${esc(r?.area || "-")}</strong></div>
+        <div class="fact"><small>시간</small><strong>${esc(j.start)}~${esc(j.end)}</strong><span class="fact-sub">근무 ${hoursText(workMinutes(j.start, j.end, j.breakMin))}</span>${j.breakMin ? `<span class="fact-sub">휴게 ${hoursText(Number(j.breakMin))}</span>` : ""}</div>
+        <div class="fact"><small>일당${j.hourly ? " (총)" : ""}</small><strong>${esc(won(j.pay))}</strong>${j.hourly ? `<span class="fact-sub">시급 ${esc(won(j.hourly))}${hasNightRate(j) ? ` · 밤 ${esc(won(j.nightHourly))}` : ""}</span>` : ""}</div>
       </div>
-      ${r?.address ? `<p class="meta-line">${icon("pin")}${esc(fullAddress(r))}</p>` : ""}
+      ${r?.address || r?.area ? `<p class="meta-line">${icon("pin")}${r?.address ? esc(fullAddress(r)) : esc(r.area)}</p>` : ""}
       ${r?.way ? `<p class="meta-line">${icon("walk")}${esc(r.way)}</p>` : ""}
       ${mapUrl(r) ? `<a class="map-link" href="${mapUrl(r)}" target="_blank" rel="noopener">${icon("pin")}지도 보기</a>` : ""}
       ${r && !r.address && !r.way ? `<button class="map-link" data-act="edit-rest" data-id="${r.id}">${icon("plus")}주소·오시는 길 넣기</button>` : ""}
       ${j.memo ? `<p class="meta-line">${icon("note")}${esc(j.memo)}</p>` : ""}
-      <div class="btn-row">${r?.phone
+      <div class="btn-row act-row">${r?.phone
         ? `<a class="btn" href="${telHref(r.phone)}">${icon("phone")}식당 전화</a><a class="btn" href="${smsHref(r.phone, restJobMsg(j))}">${icon("message")}식당 문자</a>`
-        : r ? `<button class="btn" data-act="edit-rest" data-id="${r.id}">${icon("phone")}번호 넣기</button>` : ""}<button class="btn" data-act="edit-job" data-id="${j.id}">${icon("edit")}고치기</button></div>
-      <button class="map-link add-role" data-act="add-role" data-id="${j.id}">${icon("plus")}같은 식당·날짜로 업무 추가</button>
+        : r ? `<button class="btn" data-act="edit-rest" data-id="${r.id}">${icon("phone")}번호 넣기</button>` : ""}<button class="btn more-btn" data-act="job-more" data-id="${j.id}" aria-label="일감 고치기·업무 추가">⋯</button></div>
     </div>`;
 
     if (j.canceled) {
@@ -1007,8 +1040,6 @@
     const isW = ui.peopleMode === "workers";
     return `<div class="segment"><button class="${isW ? "active" : ""}" data-act="people-mode" data-v="workers">사람 ${state.workers.length}</button><button class="${isW ? "" : "active"}" data-act="people-mode" data-v="restaurants">식당 ${state.restaurants.length}</button></div>
       <button class="btn primary big" data-act="${isW ? "new-worker" : "new-rest"}">${icon("plus")}${isW ? "사람 등록" : "식당 등록"}</button>
-      ${isW ? `<button class="btn big" style="margin-top:10px" data-act="import-vcf">${icon("contacts")}연락처 한 번에 불러오기</button>
-        <p class="hint" style="margin-top:6px">연락처 앱에서 <strong>내보내기</strong>로 만든 .vcf 파일을 골라요. 자세한 방법은 설정 화면에 있어요.</p>` : ""}
       <input id="people-q" class="search" style="margin-top:14px" type="search" placeholder="${isW ? "이름·지역·전화번호로 찾기" : "식당 이름·지역으로 찾기"}" value="${esc(ui.peopleQuery)}" />
       ${isW ? `<div class="chips filter-chips">${["", ...ROLES].map((r) => `<button class="${ui.peopleRole === r ? "active" : ""}" data-act="role-filter" data-v="${r}">${r || "전체"}</button>`).join("")}</div>` : ""}
       <div id="people-list">${peopleList()}</div>`;
@@ -2311,7 +2342,7 @@
         openSheet({
           title: "식당이 취소했어요",
           body: `<div class="pick-all-row"><p>취소할 날을 모두 골라 주세요.</p><button type="button" class="btn" data-cancel-all>모두 선택</button></div>
-            <div class="choice-list">${days.map((x) => `<label class="choice"><input type="checkbox" name="day" value="${x.id}" ${x.id === j.id ? "checked" : ""} /><span><strong>${esc(shortDate(x.date))}</strong><small>${dayInfo(x)}</small></span></label>`).join("")}</div>`,
+            <div class="choice-list">${days.map((x) => `<label class="choice"><input type="checkbox" name="day" value="${x.id}" ${x.id === j.id ? "checked" : ""} /><span><strong>${groupOf(j).indexOf(x) + 1}일째 · ${esc(shortDate(x.date))}</strong><small>${dayInfo(x)}</small></span></label>`).join("")}</div>`,
           submit: "취소로 표시",
           onReady: (form) => {
             const allBtn = form.querySelector("[data-cancel-all]");
@@ -2351,6 +2382,14 @@
     "new-script": () => scriptForm(),
     "del-script": async (el) => { if (!(await ask({ title: "이 문구를 지울까요?", ok: "지우기", danger: true }))) return; state.scripts = state.scripts.filter((s) => s.id !== el.dataset.id); sheet.close(); refresh(); },
     "backup": doBackup,
+    // 일감 카드의 [⋯]: 가끔 쓰는 고치기·업무 추가
+    "job-more": (el) => {
+      const id = el.dataset.id;
+      const row = (act, ic, label) => `<button type="button" class="menu-row" data-act="${act}" data-id="${id}" data-close><span class="menu-ic">${icon(ic)}</span><span class="menu-text"><strong>${label}</strong></span></button>`;
+      openSheet({ title: "일감", body: `<div class="menu more-menu">${row("edit-job", "edit", "일감 고치기")}${row("add-role", "plus", "같은 식당·날짜로 업무 추가")}</div>` });
+    },
+    // 홈 맨 위 수수료 줄 → 아래 '받을 수수료' 목록으로 내려가기
+    "go-fee": () => document.getElementById("fee-sec")?.scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth", block: "start" }),
     "import": () => $("#import-file").click(),
     "import-vcf": () => $("#vcf-file").click(),
     "save-rates": () => {
