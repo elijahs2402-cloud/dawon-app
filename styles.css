@@ -667,3 +667,6 @@ h2 + .day-head { margin-top: 4px; }
 .check-line:has(input:checked) { background: var(--pri-soft); box-shadow: inset 0 0 0 2px var(--pri); }
 /* 휴일 시급 체크 상자: 입력칸 공통 모양(.field input)을 덮어 원래 체크 상자로 */
 .field .check-line input[type="checkbox"] { display: inline-block; -webkit-appearance: checkbox; appearance: auto; width: 22px; height: 22px; min-height: 0; margin: 2px 0 0; padding: 0; border-radius: 4px; background: none; box-shadow: none; }
+/* 홈 '오늘 출근': 일 끝난 사람 표시 */
+.work-done { display: flex; align-items: center; gap: 6px; margin-top: 10px; color: var(--ok); font-weight: 700; }
+.work-done .ic { width: 16px; height: 16px; }

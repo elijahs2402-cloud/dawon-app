@@ -2,7 +2,7 @@
   "use strict";
 
   // 앱 버전(APP_VERSION): 설정 화면 맨 아래에 표시. sw.js의 CACHE 이름과 같이 올림
-  const APP_VERSION = "v70";
+  const APP_VERSION = "v71";
   // 저장소 이름(KEY): 휴대폰 브라우저 안에 자료를 저장할 때 쓰는 이름
   const KEY = "dawon-mobile-v1";
   // 업무 종류(ROLES)
@@ -741,12 +741,31 @@
     return `<div class="progress" role="progressbar" aria-label="근무 진행" aria-valuetext="${esc(hoursText(left))} 남음" aria-valuenow="${pct}" aria-valuemin="0" aria-valuemax="100"><span style="width:${pct}%"></span></div>
       <div class="work-time small"><span>${esc(korTime(j.start))} 시작</span><strong>${esc(hoursText(left))} 남음</strong></div>`;
   };
+  // 오늘 출근한 사람들: 일하는 중(곧 끝나는 사람부터) → 일 끝난 사람(늦게 끝난 사람부터). 오늘 하루 동안 홈에 남음
+  const todayAttended = () => {
+    const now = new Date();
+    const working = workingNow();
+    const rest = state.assigns
+      .filter((a) => a.status === "confirmed" && a.outcome === "done")
+      .map((a) => ({ a, j: effJob(a, job(a.jobId)), w: worker(a.workerId) }))
+      .filter((x) => x.j && x.w && x.j.date === today() && !working.some((y) => y.a.id === x.a.id))
+      .sort((x, y) => shiftOf(y.j).e - shiftOf(x.j).e);
+    return [...working, ...rest.filter((x) => shiftOf(x.j).s > now), ...rest.filter((x) => shiftOf(x.j).s <= now)];
+  };
   const workRow = ({ j, w }) => `<div class="check-row work-row">
       <div class="who"><button class="avatar-link" data-act="open-worker" data-id="${w.id}" aria-label="${esc(w.name)} 보기">${avatar(w)}</button><div><button class="name-link" data-act="open-worker" data-id="${w.id}">${esc(w.name)}</button>
       <div class="muted small">${esc(restName(j))} ${esc(j.role)}</div></div></div>
-      ${workBar(j)}</div>`;
+      ${(() => {
+        // 일하는 중이면 진행 막대, 끝났으면 '일 끝남', 아직 시작 전이면 시작 시각
+        const { s, e } = shiftOf(j);
+        const now = new Date();
+        if (now >= s && now < e) return workBar(j);
+        return now >= e
+          ? `<div class="work-done small">${icon("check")}일 끝남 · ${esc(korTime(j.end))}</div>`
+          : `<div class="work-done small">${icon("check")}출근함 · ${esc(korTime(j.start))} 시작</div>`;
+      })()}</div>`;
 
-  // 근무 시작 시각이 지났는데 출근 여부를 아직 안 적은 사람들 (출근함을 누르면 '지금 일하는 중'으로 옮겨감)
+  // 근무 시작 시각이 지났는데 출근 여부를 아직 안 적은 사람들 (출근함을 누르면 '오늘 출근'으로 옮겨감)
   const pendingChecks = () => {
     const now = new Date();
     return state.assigns
@@ -824,8 +843,10 @@
     if (checks.length) {
       html += `<h2>출근했는지 체크해 주세요 <span class="count">${checks.length}</span></h2><div class="card">${checks.map(checkRow).join("")}</div>`;
     }
-    if (working.length) {
-      html += `<h2>지금 일하는 중 <span class="count">${working.length}</span></h2><div class="card">${working.map(workRow).join("")}</div>`;
+    // 오늘 출근: 출근함을 누른 사람은 일이 끝나도 오늘 하루 동안 여기 남음
+    const attended = todayAttended();
+    if (attended.length) {
+      html += `<h2>오늘 출근 <span class="count">${attended.length}</span></h2><div class="card">${attended.map(workRow).join("")}</div>`;
     }
     // 다가오는 일: 사람이 필요한 일 + 오늘·내일 인원이 다 찬 일을 모두 보여줌 (접기 없음)
     // 날짜순, 같은 날에서는 사람이 필요한 일 먼저 → 시간순. 날짜가 바뀔 때마다 날짜 제목
