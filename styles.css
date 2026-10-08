@@ -659,3 +659,11 @@ h2 + .day-head { margin-top: 4px; }
 }
 /* 시간은 "~" 뒤에서만 줄바꿈 (10:00~ / 18:00) */
 .fact strong, .month strong, .stat-grid strong { overflow-wrap: normal; }
+/* 일감 입력: '휴일 시급' 체크 줄 */
+.check-line { display: flex; align-items: flex-start; gap: 12px; margin-top: 12px; padding: 14px 16px; border-radius: 14px; background: var(--fill); cursor: pointer; }
+.check-line[hidden] { display: none; }
+.check-line input { width: 22px; height: 22px; margin: 2px 0 0; flex: none; accent-color: var(--pri); }
+.check-line small { display: block; color: var(--sub); font-weight: 500; }
+.check-line:has(input:checked) { background: var(--pri-soft); box-shadow: inset 0 0 0 2px var(--pri); }
+/* 휴일 시급 체크 상자: 입력칸 공통 모양(.field input)을 덮어 원래 체크 상자로 */
+.field .check-line input[type="checkbox"] { display: inline-block; -webkit-appearance: checkbox; appearance: auto; width: 22px; height: 22px; min-height: 0; margin: 2px 0 0; padding: 0; border-radius: 4px; background: none; box-shadow: none; }

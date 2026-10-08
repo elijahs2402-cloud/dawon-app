@@ -2,7 +2,7 @@
   "use strict";
 
   // 앱 버전(APP_VERSION): 설정 화면 맨 아래에 표시. sw.js의 CACHE 이름과 같이 올림
-  const APP_VERSION = "v69";
+  const APP_VERSION = "v70";
   // 저장소 이름(KEY): 휴대폰 브라우저 안에 자료를 저장할 때 쓰는 이름
   const KEY = "dawon-mobile-v1";
   // 업무 종류(ROLES)
@@ -83,9 +83,25 @@
     return NIGHT.reduce((sum, [a, b]) => sum + Math.max(0, Math.min(e, b) - Math.max(s, a)), 0);
   };
   // 급여 나누기: 휴게시간은 낮 시간에서 먼저 빼고, 모자라면 밤 시간에서 뺌
-  const payBreakdown = (start, end, breakMin, hourly, nightHourly) => {
+  // 공휴일 (토·일은 따로 계산). 2026·2027년: 설·추석·대체공휴일·임시공휴일(지방선거) 포함, 2026년부터 노동절·제헌절 포함
+  const HOLIDAYS = new Set([
+    "2026-01-01", "2026-02-16", "2026-02-17", "2026-02-18", "2026-03-01", "2026-03-02", "2026-05-01", "2026-05-05",
+    "2026-05-24", "2026-05-25", "2026-06-03", "2026-06-06", "2026-07-17", "2026-08-15", "2026-08-17", "2026-09-24",
+    "2026-09-25", "2026-09-26", "2026-10-03", "2026-10-05", "2026-10-09", "2026-12-25",
+    "2027-01-01", "2027-02-06", "2027-02-07", "2027-02-08", "2027-02-09", "2027-03-01", "2027-05-01", "2027-05-03",
+    "2027-05-05", "2027-05-13", "2027-06-06", "2027-07-17", "2027-07-19", "2027-08-15", "2027-08-16", "2027-09-14",
+    "2027-09-15", "2027-09-16", "2027-10-03", "2027-10-04", "2027-10-09", "2027-10-11", "2027-12-25",
+  ]);
+  // isHolidayDate: 토·일 또는 공휴일인 날 ("2026-10-10" → true)
+  const isHolidayDate = (d) => {
+    if (!d) return false;
+    const day = new Date(`${d}T00:00:00`).getDay();
+    return day === 0 || day === 6 || HOLIDAYS.has(d);
+  };
+  // allDay: 주말·공휴일 일감이면 근무 전체를 밤 시급으로 (밤·주말·공휴일 시급이 같음)
+  const payBreakdown = (start, end, breakMin, hourly, nightHourly, allDay = false) => {
     const total = workMinutes(start, end, 0);
-    const nightAll = nightMinutes(start, end);
+    const nightAll = allDay ? total : nightMinutes(start, end);
     let dayMin = total - nightAll;
     let nightMin = nightAll;
     const brk = Math.min(Number(breakMin) || 0, total);
@@ -96,10 +112,10 @@
     const pay = Math.round(((Number(hourly) || 0) * dayMin + nightRate * nightMin) / 60);
     return { dayMin, nightMin, nightRate, pay };
   };
-  const hasNightRate = (j) => Boolean(j.nightHourly && Number(j.nightHourly) !== Number(j.hourly) && nightMinutes(j.start, j.end));
+  const hasNightRate = (j) => Boolean(j.nightHourly && Number(j.nightHourly) !== Number(j.hourly) && (j.holiday || nightMinutes(j.start, j.end)));
   // 문자·화면용 급여 글: "시급 11,000원(밤 16,500원) · 일당 110,000원"
   const payText = (j) => (j.hourly
-    ? `시급 ${won(j.hourly)}${hasNightRate(j) ? `(밤 ${won(j.nightHourly)})` : ""} · 일당 ${won(j.pay)}`
+    ? `${j.holiday ? `시급 ${won(Number(j.nightHourly) || j.hourly)}(주말·공휴일)` : `시급 ${won(j.hourly)}${hasNightRate(j) ? `(밤 ${won(j.nightHourly)})` : ""}`} · 일당 ${won(j.pay)}`
     : `일당 ${won(j.pay)}`);
   // 시간을 "오전 9:00"처럼
   const timeLabel = (t) => {
@@ -695,7 +711,7 @@
   const payOf = (a, j) => {
     const e = effJob(a, j);
     if (e === j || !j.hourly) return Number(j.pay) || 0;
-    return payBreakdown(e.start, e.end, j.breakMin, j.hourly, j.nightHourly || 0).pay;
+    return payBreakdown(e.start, e.end, j.breakMin, j.hourly, j.nightHourly || 0, j.holiday).pay;
   };
   const feeOf = (a, j) => Math.round(payOf(a, j) * state.feeRate / 100);
   // 약속보다 얼마나 더/덜 일했는지 (분, 더 일하면 +)
@@ -956,7 +972,7 @@
       ${reqOf(j).length > 1 ? `<div class="day-tabs role-tabs" aria-label="같은 요청 업무">${reqOf(j).map((x) => `<button class="day-tab ${x.id === j.id ? "on" : ""}" data-act="open-job" data-id="${x.id}"><small>${x.start}~</small>${esc(x.role)} ${x.headcount}명</button>`).join("")}</div>` : ""}
       <div class="facts">
         <div class="fact"><small>시간</small><strong>${esc(j.start)}~<wbr>${esc(j.end)}</strong><span class="fact-sub">근무 ${hoursText(workMinutes(j.start, j.end, j.breakMin))}</span>${j.breakMin ? `<span class="fact-sub">휴게 ${hoursText(Number(j.breakMin))}</span>` : ""}</div>
-        <div class="fact"><small>일당${j.hourly ? " (총)" : ""}</small><strong>${esc(won(j.pay))}</strong>${j.hourly ? `<span class="fact-sub">시급 ${esc(won(j.hourly))}${hasNightRate(j) ? ` · 밤 ${esc(won(j.nightHourly))}` : ""}</span>` : ""}</div>
+        <div class="fact"><small>일당${j.hourly ? " (총)" : ""}</small><strong>${esc(won(j.pay))}</strong>${j.hourly ? `<span class="fact-sub">${j.holiday ? `휴일 시급 ${esc(won(Number(j.nightHourly) || j.hourly))}` : `시급 ${esc(won(j.hourly))}${hasNightRate(j) ? ` · 밤 ${esc(won(j.nightHourly))}` : ""}`}</span>` : ""}</div>
       </div>
       ${r?.address || r?.area ? `<p class="meta-line">${icon("pin")}${r?.address ? esc(fullAddress(r)) : esc(r.area)}</p>` : ""}
       ${r?.way ? `<p class="meta-line">${icon("walk")}${esc(r.way)}</p>` : ""}
@@ -1136,8 +1152,8 @@
     <div class="card rate-card">
       <div class="rate-title"><span class="menu-ic">${icon("edit")}</span><div><strong>기본 시급</strong><small>모든 업무에 같이 쓰고, 일감 받기에서 자동으로 들어가요</small></div></div>
       <label class="field">낮 시급 (원)<input id="rate-d" inputmode="numeric" placeholder="예: 12000" value="${esc(state.rate?.day || "")}" /></label>
-      <div class="field">밤 시급 (밤 10시~아침 6시)
-        <span class="name-search"><input id="rate-n" inputmode="numeric" aria-label="밤 시급 (원)" placeholder="비워 두면 낮 시급과 같아요" value="${esc(state.rate?.night || "")}" /><button type="button" class="name-search-btn" data-act="rate-x">1.5배</button></span>
+      <div class="field">밤·주말·공휴일 시급 <span class="hint" style="display:inline">밤 10시~아침 6시, 토·일·공휴일 하루 종일</span>
+        <span class="name-search"><input id="rate-n" inputmode="numeric" aria-label="밤·주말·공휴일 시급 (원)" placeholder="비워 두면 낮 시급과 같아요" value="${esc(state.rate?.night || "")}" /><button type="button" class="name-search-btn" data-act="rate-x">1.5배</button></span>
       </div>
       <button class="btn primary big" data-act="save-rates">기본 시급 저장</button>
       <p class="hint" style="margin-top:8px">이미 만든 일감의 시급은 바뀌지 않아요. 식당마다 다르면 일감 받기에서 그 칸만 고치면 돼요.</p>
@@ -1260,7 +1276,7 @@
           <div class="stepper small"><button type="button" data-step="-1" aria-label="줄이기">${icon("minus")}</button><input name="hc_${i}" aria-label="${ROLES[i]} 인원 (명)" type="number" min="1" max="20" value="${esc(mine.headcount || 1)}" /><button type="button" data-step="1" aria-label="늘리기">${icon("plus")}</button></div>
         </div>
         <input name="hr_${i}" aria-label="${ROLES[i]} 시급 (원)" class="role-in" inputmode="numeric" placeholder="시급 (예: 11000)" value="${esc(mine.hourly || "")}" />
-        <div class="night-in" hidden><input name="nh_${i}" aria-label="${ROLES[i]} 밤 시급 (원)" class="role-in" inputmode="numeric" placeholder="밤 시급 (비우면 낮 시급과 같아요)" value="${esc(mine.nightHourly || "")}" /><button type="button" class="name-search-btn" data-night-x="${i}">1.5배</button></div>
+        <div class="night-in" hidden><input name="nh_${i}" aria-label="${ROLES[i]} 밤·주말·공휴일 시급 (원)" class="role-in" inputmode="numeric" placeholder="밤·주말·공휴일 시급 (비우면 낮 시급과 같아요)" value="${esc(mine.nightHourly || "")}" /><button type="button" class="name-search-btn" data-night-x="${i}">1.5배</button></div>
         <div class="row-calc"></div>
       </div>`;
     };
@@ -1285,6 +1301,7 @@
           <input type="date" name="dateEnd" aria-label="끝나는 날짜" value="${presetMulti ? esc(preset.dates[preset.dates.length - 1]) : ""}" hidden />
         </div>
         <span class="hint" id="days-hint"></span>
+        <label class="check-line" id="holiday-line"><input type="checkbox" name="holiday" ${(existing ? existing.holiday ?? isHolidayDate(j.date) : isHolidayDate(j.date)) ? "checked" : ""} /><span><strong>휴일 시급</strong><small>토·일·공휴일은 하루 종일 밤 시급으로 계산해요</small></span></label>
       </fieldset>
       <div class="field">시작${timePicker("start", j.start)}</div>
       <div class="field">끝${timePicker("end", j.end)}</div>
@@ -1366,6 +1383,11 @@
           calc();
           syncPlan();
         };
+        // 지금 고른 날짜들의 휴일 여부: 하루짜리는 '휴일 시급' 칸, 여러 날은 날짜마다 자동
+        const holidayFlags = () => {
+          const ds = datesOf(form);
+          return ds.length > 1 ? ds.map(isHolidayDate) : [Boolean(form.elements.holiday?.checked)];
+        };
         // 업무마다 시급 × 근무시간 = 일당 계산
         const calc = () => {
           const start = form.elements.start.value;
@@ -1373,19 +1395,29 @@
           const brk = form.querySelector("input[name=breakMin]:checked")?.value;
           const min = workMinutes(start, end, brk);
           const hasNight = nightMinutes(start, end) > 0;
-          $("#night-hint", form).textContent = hasNight ? "밤 10시~아침 6시가 들어간 근무예요. 밤 시급을 넣거나 [1.5배]를 눌러 주세요" : "";
+          const flags = holidayFlags();
+          const anyHoliday = flags.includes(true);
+          const kinds = [...new Set(flags)]; // [false], [true], 또는 둘 다 (여러 날에 평일·휴일 섞임)
+          $("#night-hint", form).textContent = anyHoliday
+            ? "주말·공휴일은 하루 종일 밤·주말·공휴일 시급이에요. 칸을 채우거나 [1.5배]를 눌러 주세요"
+            : hasNight ? "밤 10시~아침 6시가 들어간 근무예요. 밤 시급을 넣거나 [1.5배]를 눌러 주세요" : "";
           rowsBox.querySelectorAll(".role-row").forEach((row) => {
             const i = row.dataset.i;
-            row.querySelector(".night-in").hidden = !hasNight;
+            row.querySelector(".night-in").hidden = !hasNight && !anyHoliday;
             const hourly = num(form.elements[`hr_${i}`].value);
             const night = num(form.elements[`nh_${i}`].value);
             const out = row.querySelector(".row-calc");
             if (hourly && min) {
-              const b = payBreakdown(start, end, brk, hourly, hasNight ? night : 0);
-              const parts = b.nightMin
-                ? `${b.dayMin ? `낮 ${hoursText(b.dayMin)} × ${won(hourly)} + ` : ""}밤 ${hoursText(b.nightMin)} × ${won(b.nightRate)}`
-                : `${won(hourly)} × ${hoursText(b.dayMin)}`;
-              out.innerHTML = `${parts} = <strong>일당 ${won(b.pay)}</strong>`;
+              out.innerHTML = kinds.map((h) => {
+                const b = payBreakdown(start, end, brk, hourly, hasNight || h ? night : 0, h);
+                const parts = h
+                  ? `${hoursText(b.nightMin)} × ${won(b.nightRate)}`
+                  : b.nightMin
+                    ? `${b.dayMin ? `낮 ${hoursText(b.dayMin)} × ${won(hourly)} + ` : ""}밤 ${hoursText(b.nightMin)} × ${won(b.nightRate)}`
+                    : `${won(hourly)} × ${hoursText(b.dayMin)}`;
+                const label = kinds.length > 1 ? (h ? "주말·공휴일 " : "평일 ") : h ? "휴일 " : "";
+                return `${label}${parts} = <strong>일당 ${won(b.pay)}</strong>`;
+              }).join("<br>");
             } else if (existing?.pay && !existing.hourly && !hourly) {
               out.innerHTML = `예전에 넣은 일당 <strong>${won(existing.pay)}</strong> · 시급을 넣으면 다시 계산돼요`;
             } else out.innerHTML = min ? `근무 ${hoursText(min)} · 시급을 넣으면 일당이 계산돼요` : "";
@@ -1417,17 +1449,22 @@
             form.elements.dateEnd.value = ymd(d);
           }
           const n = datesOf(form).length;
-          $("#days-hint", form).textContent = isMulti ? (n ? `${n}일 · 날마다 필요한 업무는 아래에서 고를 수 있어요` : "끝 날짜를 시작 날짜 뒤로 골라 주세요") : "";
+          const hol = datesOf(form).filter(isHolidayDate);
+          $("#days-hint", form).textContent = isMulti ? (n ? `${n}일 · 날마다 필요한 업무는 아래에서 고를 수 있어요${hol.length ? ` · 주말·공휴일 ${hol.map(shortDate).join(", ")}은 휴일 시급` : ""}` : "끝 날짜를 시작 날짜 뒤로 골라 주세요") : "";
+          form.querySelector("#holiday-line").hidden = isMulti;
           syncPlan();
+          calc();
         };
         form.querySelectorAll("input[name=dateQuick]").forEach((i) => i.addEventListener("change", () => {
-          if (i.value !== "multi") form.elements.date.value = i.value;
+          if (i.value !== "multi") { form.elements.date.value = i.value; form.elements.holiday.checked = isHolidayDate(i.value); }
           syncDates();
         }));
         form.elements.date.addEventListener("change", () => {
           if (!multi?.checked) form.querySelectorAll("input[name=dateQuick]").forEach((i) => { i.checked = i.value === form.elements.date.value; });
+          form.elements.holiday.checked = isHolidayDate(form.elements.date.value); // 날짜를 바꾸면 휴일 칸을 다시 자동으로
           syncDates();
         });
+        form.elements.holiday.addEventListener("change", calc);
         form.elements.dateEnd.addEventListener("change", syncDates);
         form.querySelectorAll("input[name=breakMin]").forEach((i) => i.addEventListener("change", calc));
         const syncNew = () => {
@@ -1457,7 +1494,9 @@
           restaurantId = r.id;
         }
         const breakMin = Number(val(fd, "breakMin")) || 0;
-        const night = nightMinutes(start, end) > 0;
+        // 휴일 여부: 하루짜리는 '휴일 시급' 칸, 여러 날은 날짜마다 자동 (토·일·공휴일)
+        const holidayOf = (date) => (dates.length > 1 ? isHolidayDate(date) : Boolean(fd.get("holiday")));
+        const night = nightMinutes(start, end) > 0 || dates.some(holidayOf);
         // 업무마다 인원·시급·일당
         const perRole = roleIdx.map((i) => {
           const hourly = num(val(fd, `hr_${i}`));
@@ -1468,12 +1507,14 @@
             headcount: Math.max(1, num(val(fd, `hc_${i}`)) || 1),
             hourly,
             nightHourly,
-            pay: hourly ? payBreakdown(start, end, breakMin, hourly, nightHourly).pay : keepOld,
+            pay: hourly ? payBreakdown(start, end, breakMin, hourly, nightHourly, holidayOf(dates[0])).pay : keepOld,
           };
         });
+        // 날짜에 맞춘 휴일 표시·일당 (여러 날이면 날마다 다를 수 있음)
+        const forDate = (p, date) => ({ holiday: holidayOf(date), ...(p.hourly ? { pay: payBreakdown(start, end, breakMin, p.hourly, p.nightHourly, holidayOf(date)).pay } : {}) });
         const common = { restaurantId, start, end, breakMin, memo: val(fd, "memo") };
         if (existing) {
-          Object.assign(existing, common, perRole[0], { date: dates[0] });
+          Object.assign(existing, common, perRole[0], { date: dates[0] }, forDate(perRole[0], dates[0]));
           // 일당이 바뀌면 이미 출근한 분 수수료도 다시 계산
           assignsOf(existing.id).filter((a) => a.outcome === "done").forEach((a) => { a.fee = feeOf(a, existing); });
           refresh();
@@ -1490,7 +1531,7 @@
         const reqs = Object.fromEntries(plan.map((x) => [x.date, preset?.reqByDate?.[x.date] || (x.roles.length > 1 ? uid() : "")]));
         const made = [];
         plan.forEach(({ date, roles }) => roles.forEach((p) => {
-          made.push({ id: uid(), ...common, ...p, date, ...(groups[p.role] ? { group: groups[p.role] } : {}), ...(reqs[date] ? { req: reqs[date] } : {}), created: today() });
+          made.push({ id: uid(), ...common, ...p, ...forDate(p, date), date, ...(groups[p.role] ? { group: groups[p.role] } : {}), ...(reqs[date] ? { req: reqs[date] } : {}), created: today() });
         }));
         state.jobs.push(...made);
         save();
@@ -2278,9 +2319,9 @@
             const diff = min - workMinutes(j.start, j.end, j.breakMin);
             const diffText = diff ? ` (약속보다 ${hoursText(Math.abs(diff))} ${diff > 0 ? "더" : "덜"})` : "";
             if (!j.hourly) { box.innerHTML = `근무 ${hoursText(min)}${diffText} · 시급이 없어서 일당은 그대로예요${longNote}`; return; }
-            const pay = payBreakdown(start, end, j.breakMin, j.hourly, j.nightHourly || 0).pay;
+            const pay = payBreakdown(start, end, j.breakMin, j.hourly, j.nightHourly || 0, j.holiday).pay;
             // 비교 기준: 저장된 일당이 아니라 '약속 시간 × 시급'으로 다시 계산한 값 (시간을 안 바꾸면 차이 0)
-            const base = payBreakdown(j.start, j.end, j.breakMin, j.hourly, j.nightHourly || 0).pay;
+            const base = payBreakdown(j.start, j.end, j.breakMin, j.hourly, j.nightHourly || 0, j.holiday).pay;
             const gap = pay - base;
             box.innerHTML = `${won(j.hourly)} × ${hoursText(min)}${diffText}<br><strong>일당 ${won(pay)}</strong>${gap ? ` · 약속보다 ${gap > 0 ? "+" : "−"}${won(Math.abs(gap))}` : ""}${longNote}`;
           };
