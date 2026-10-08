@@ -2,7 +2,7 @@
   "use strict";
 
   // 앱 버전(APP_VERSION): 설정 화면 맨 아래에 표시. sw.js의 CACHE 이름과 같이 올림
-  const APP_VERSION = "v68";
+  const APP_VERSION = "v69";
   // 저장소 이름(KEY): 휴대폰 브라우저 안에 자료를 저장할 때 쓰는 이름
   const KEY = "dawon-mobile-v1";
   // 업무 종류(ROLES)
@@ -506,9 +506,10 @@
   // 사용: if (!(await ask({ title, text, ok: "지우기", danger: true }))) return;
   const askBox = document.createElement("dialog");
   askBox.className = "ask";
+  askBox.setAttribute("aria-labelledby", "ask-title");
   document.body.append(askBox);
   const ask = ({ title, text = "", ok = "확인", cancel = "그대로 두기", danger = false }) => new Promise((resolve) => {
-    askBox.innerHTML = `<div class="ask-card"><h3>${esc(title)}</h3>${text ? `<p>${esc(text).replace(/\n/g, "<br>")}</p>` : ""}
+    askBox.innerHTML = `<div class="ask-card"><h3 id="ask-title">${esc(title)}</h3>${text ? `<p>${esc(text).replace(/\n/g, "<br>")}</p>` : ""}
       <div class="ask-btns"><button type="button" class="btn" data-ask="0">${esc(cancel)}</button><button type="button" class="btn ${danger ? "danger" : "primary"}" data-ask="1">${esc(ok)}</button></div></div>`;
     const done = (v) => { askBox.onclick = null; askBox.oncancel = null; askBox.close(); resolve(v); };
     askBox.onclick = (e) => { const b = e.target.closest("[data-ask]"); if (b) done(b.dataset.ask === "1"); else if (e.target === askBox) done(false); };
@@ -519,6 +520,7 @@
   // ---------- 아래에서 올라오는 입력창(시트) ----------
   const sheet = $("#sheet");
   const sheetForm = $("#sheet-form");
+  sheet.setAttribute("aria-labelledby", "sheet-title"); // 화면 읽기 기능이 팝업 제목을 읽어 줌
   let sheetSubmit = null;
   // 입력창이 닫힐 때 아래로 미끄러져 내려가게 함 (원래 닫기 기능을 감싸서 사용)
   const nativeClose = HTMLDialogElement.prototype.close;
@@ -572,7 +574,7 @@
   const openSheet = ({ title, body, submit = "저장", onSubmit, onReady }) => {
     // 닫히는 중에 새 창을 열면 닫기를 취소하고 내용만 바꿈
     if (closeTimer) { clearTimeout(closeTimer); closeTimer = null; sheet.classList.remove("closing"); }
-    sheetForm.innerHTML = `<div class="sheet-head"><h2>${esc(title)}</h2><button type="button" class="icon-btn" data-close aria-label="닫기">${icon("x")}</button></div>
+    sheetForm.innerHTML = `<div class="sheet-head"><h2 id="sheet-title">${esc(title)}</h2><button type="button" class="icon-btn" data-close aria-label="닫기">${icon("x")}</button></div>
       <div class="sheet-body">${body}</div>
       <div class="sheet-foot"><button type="button" class="btn ghost" data-close>닫기</button>${onSubmit ? `<button type="submit" class="btn primary">${esc(submit)}</button>` : ""}</div>`;
     sheetSubmit = onSubmit || null;
@@ -720,7 +722,7 @@
     const { s, e } = shiftOf(j);
     const pct = Math.max(0, Math.min(100, Math.round(((Date.now() - s) / (e - s)) * 100)));
     const left = Math.max(1, Math.round((e - Date.now()) / 60000));
-    return `<div class="progress" role="progressbar" aria-valuenow="${pct}" aria-valuemin="0" aria-valuemax="100"><span style="width:${pct}%"></span></div>
+    return `<div class="progress" role="progressbar" aria-label="근무 진행" aria-valuetext="${esc(hoursText(left))} 남음" aria-valuenow="${pct}" aria-valuemin="0" aria-valuemax="100"><span style="width:${pct}%"></span></div>
       <div class="work-time small"><span>${esc(korTime(j.start))} 시작</span><strong>${esc(hoursText(left))} 남음</strong></div>`;
   };
   const workRow = ({ j, w }) => `<div class="check-row work-row">
@@ -953,7 +955,7 @@
       ${groupOf(j).length > 1 ? `<div class="day-tabs" aria-label="연속 근무 날짜">${groupOf(j).map((x, i) => `<button class="day-tab ${x.id === j.id ? "on" : ""}" data-act="open-job" data-id="${x.id}"><small>${i + 1}일째</small>${esc(dateText(x.date).replace(/^(오늘|내일|어제) /, ""))}</button>`).join("")}</div>` : ""}
       ${reqOf(j).length > 1 ? `<div class="day-tabs role-tabs" aria-label="같은 요청 업무">${reqOf(j).map((x) => `<button class="day-tab ${x.id === j.id ? "on" : ""}" data-act="open-job" data-id="${x.id}"><small>${x.start}~</small>${esc(x.role)} ${x.headcount}명</button>`).join("")}</div>` : ""}
       <div class="facts">
-        <div class="fact"><small>시간</small><strong>${esc(j.start)}~${esc(j.end)}</strong><span class="fact-sub">근무 ${hoursText(workMinutes(j.start, j.end, j.breakMin))}</span>${j.breakMin ? `<span class="fact-sub">휴게 ${hoursText(Number(j.breakMin))}</span>` : ""}</div>
+        <div class="fact"><small>시간</small><strong>${esc(j.start)}~<wbr>${esc(j.end)}</strong><span class="fact-sub">근무 ${hoursText(workMinutes(j.start, j.end, j.breakMin))}</span>${j.breakMin ? `<span class="fact-sub">휴게 ${hoursText(Number(j.breakMin))}</span>` : ""}</div>
         <div class="fact"><small>일당${j.hourly ? " (총)" : ""}</small><strong>${esc(won(j.pay))}</strong>${j.hourly ? `<span class="fact-sub">시급 ${esc(won(j.hourly))}${hasNightRate(j) ? ` · 밤 ${esc(won(j.nightHourly))}` : ""}</span>` : ""}</div>
       </div>
       ${r?.address || r?.area ? `<p class="meta-line">${icon("pin")}${r?.address ? esc(fullAddress(r)) : esc(r.area)}</p>` : ""}
@@ -987,7 +989,7 @@
     // 진행 막대 카드와 이름 카드를 따로 나눔
     if (confList.length) html += `<h2>확정된 분</h2><div class="card progress-card">
       <div class="progress-head"><strong>${confList.length}/${esc(j.headcount)}명 확정</strong><span class="${need ? "need" : "full"}">${need ? `${need}명 더 필요` : "인원 다 찼어요"}</span></div>
-      <div class="progress" role="progressbar" aria-valuenow="${pct}" aria-valuemin="0" aria-valuemax="100"><span style="width:${pct}%"></span></div></div>
+      <div class="progress" role="progressbar" aria-label="확정 인원" aria-valuetext="${confList.length}/${esc(j.headcount)}명 확정" aria-valuenow="${pct}" aria-valuemin="0" aria-valuemax="100"><span style="width:${pct}%"></span></div></div>
       <div class="card confirmed-card">${confList.map((a) => assignRow(a, j)).join("")}</div>`;
     if (restList.length) html += `<h2>연락한 사람</h2><div class="card">${restList.map((a) => assignRow(a, j)).join("")}</div>`;
 
@@ -1040,7 +1042,7 @@
     const isW = ui.peopleMode === "workers";
     return `<div class="segment"><button class="${isW ? "active" : ""}" data-act="people-mode" data-v="workers">사람 ${state.workers.length}</button><button class="${isW ? "" : "active"}" data-act="people-mode" data-v="restaurants">식당 ${state.restaurants.length}</button></div>
       <button class="btn primary big" data-act="${isW ? "new-worker" : "new-rest"}">${icon("plus")}${isW ? "사람 등록" : "식당 등록"}</button>
-      <input id="people-q" class="search" style="margin-top:14px" type="search" placeholder="${isW ? "이름·지역·전화번호로 찾기" : "식당 이름·지역으로 찾기"}" value="${esc(ui.peopleQuery)}" />
+      <input id="people-q" class="search" style="margin-top:14px" type="search" aria-label="${isW ? "사람 찾기" : "식당 찾기"}" placeholder="${isW ? "이름·지역·전화번호로 찾기" : "식당 이름·지역으로 찾기"}" value="${esc(ui.peopleQuery)}" />
       ${isW ? `<div class="chips filter-chips">${["", ...ROLES].map((r) => `<button class="${ui.peopleRole === r ? "active" : ""}" data-act="role-filter" data-v="${r}">${r || "전체"}</button>`).join("")}</div>` : ""}
       <div id="people-list">${peopleList()}</div>`;
   };
@@ -1135,7 +1137,7 @@
       <div class="rate-title"><span class="menu-ic">${icon("edit")}</span><div><strong>기본 시급</strong><small>모든 업무에 같이 쓰고, 일감 받기에서 자동으로 들어가요</small></div></div>
       <label class="field">낮 시급 (원)<input id="rate-d" inputmode="numeric" placeholder="예: 12000" value="${esc(state.rate?.day || "")}" /></label>
       <div class="field">밤 시급 (밤 10시~아침 6시)
-        <span class="name-search"><input id="rate-n" inputmode="numeric" placeholder="비워 두면 낮 시급과 같아요" value="${esc(state.rate?.night || "")}" /><button type="button" class="name-search-btn" data-act="rate-x">1.5배</button></span>
+        <span class="name-search"><input id="rate-n" inputmode="numeric" aria-label="밤 시급 (원)" placeholder="비워 두면 낮 시급과 같아요" value="${esc(state.rate?.night || "")}" /><button type="button" class="name-search-btn" data-act="rate-x">1.5배</button></span>
       </div>
       <button class="btn primary big" data-act="save-rates">기본 시급 저장</button>
       <p class="hint" style="margin-top:8px">이미 만든 일감의 시급은 바뀌지 않아요. 식당마다 다르면 일감 받기에서 그 칸만 고치면 돼요.</p>
@@ -1163,14 +1165,23 @@
   // ---------- 그리기 ----------
   const TITLES = { home: "다원 어머니회", jobs: "일감", people: "사람", scripts: "문자 문구", more: "설정·백업" };
   const screens = { home: renderHome, jobs: renderJobs, people: renderPeople, scripts: renderScripts, more: renderMore, job: renderJob, worker: renderWorker };
+  // 색으로만 보이는 '선택됨'을 화면 읽기 기능에도 알림 (사람·식당 칸, 업무 고르기, 1일째·2일째 칸)
+  const markSelected = (root) => root.querySelectorAll(".segment button, .filter-chips button, .day-tab").forEach((b) => {
+    b.setAttribute("aria-pressed", String(b.classList.contains("active") || b.classList.contains("on")));
+  });
   const render = () => {
     const tab = { job: "jobs", worker: "people" }[route.name] || route.name;
-    document.querySelectorAll(".tabbar button").forEach((b) => b.classList.toggle("active", b.dataset.tab === tab));
+    document.querySelectorAll(".tabbar button").forEach((b) => {
+      b.classList.toggle("active", b.dataset.tab === tab);
+      // 화면 읽기 기능(톡백)이 "현재 페이지"라고 읽어 줌
+      if (b.dataset.tab === tab) b.setAttribute("aria-current", "page"); else b.removeAttribute("aria-current");
+    });
     const detail = isDetail(route);
     $("#back").hidden = !detail;
     $("#title").textContent = route.name === "job" ? "일감 보기" : route.name === "worker" ? (worker(route.id)?.name || "사람") : TITLES[route.name];
     const scr = $("#screen");
     scr.innerHTML = (screens[route.name] || renderHome)(route.id);
+    markSelected(scr);
     // 화면을 옮겼을 때만 움직임 (버튼 누를 때마다 다시 그려도 흔들리지 않게)
     const dir = navDir;
     navDir = "";
@@ -1246,10 +1257,10 @@
       const mine = existing && existing.role === ROLES[i] ? existing : { hourly: rate.day || "", nightHourly: rate.night || "" };
       return `<div class="role-row" data-i="${i}">
         <div class="role-row-head"><strong>${ROLES[i]}</strong>
-          <div class="stepper small"><button type="button" data-step="-1" aria-label="줄이기">${icon("minus")}</button><input name="hc_${i}" type="number" min="1" max="20" value="${esc(mine.headcount || 1)}" /><button type="button" data-step="1" aria-label="늘리기">${icon("plus")}</button></div>
+          <div class="stepper small"><button type="button" data-step="-1" aria-label="줄이기">${icon("minus")}</button><input name="hc_${i}" aria-label="${ROLES[i]} 인원 (명)" type="number" min="1" max="20" value="${esc(mine.headcount || 1)}" /><button type="button" data-step="1" aria-label="늘리기">${icon("plus")}</button></div>
         </div>
-        <input name="hr_${i}" class="role-in" inputmode="numeric" placeholder="시급 (예: 11000)" value="${esc(mine.hourly || "")}" />
-        <div class="night-in" hidden><input name="nh_${i}" class="role-in" inputmode="numeric" placeholder="밤 시급 (비우면 낮 시급과 같아요)" value="${esc(mine.nightHourly || "")}" /><button type="button" class="name-search-btn" data-night-x="${i}">1.5배</button></div>
+        <input name="hr_${i}" aria-label="${ROLES[i]} 시급 (원)" class="role-in" inputmode="numeric" placeholder="시급 (예: 11000)" value="${esc(mine.hourly || "")}" />
+        <div class="night-in" hidden><input name="nh_${i}" aria-label="${ROLES[i]} 밤 시급 (원)" class="role-in" inputmode="numeric" placeholder="밤 시급 (비우면 낮 시급과 같아요)" value="${esc(mine.nightHourly || "")}" /><button type="button" class="name-search-btn" data-night-x="${i}">1.5배</button></div>
         <div class="row-calc"></div>
       </div>`;
     };
@@ -1269,9 +1280,9 @@
       <fieldset class="field"><legend>날짜</legend>
         <div class="chips">${quick}${existing ? "" : `<label class="chip"><input type="radio" name="dateQuick" value="multi" ${presetMulti ? "checked" : ""} /><span>여러 날</span></label>`}</div>
         <div class="date-range">
-          <input type="date" name="date" value="${esc(j.date)}" required />
+          <input type="date" name="date" aria-label="날짜 (시작일)" value="${esc(j.date)}" required />
           <span class="range-to" hidden>~</span>
-          <input type="date" name="dateEnd" value="${presetMulti ? esc(preset.dates[preset.dates.length - 1]) : ""}" hidden />
+          <input type="date" name="dateEnd" aria-label="끝나는 날짜" value="${presetMulti ? esc(preset.dates[preset.dates.length - 1]) : ""}" hidden />
         </div>
         <span class="hint" id="days-hint"></span>
       </fieldset>

@@ -632,3 +632,30 @@ h2 + .day-head { margin-top: 4px; }
 .day-tabs { scrollbar-width: none; }
 .day-tabs::-webkit-scrollbar { display: none; }
 .day-tab { flex: 1 0 auto; padding: 6px 8px; }
+/* ---------- 접근성 점검 반영 (v69) ---------- */
+/* 1·2. 대비 4.5:1 이상: 사람·식당 칸의 선택 안 된 쪽, '주의' 표시 */
+.segment button { color: #56616d; }
+.segment button.active { color: var(--ink); }
+.badge.bad { color: #c92534; }
+/* 3. 글자를 크게 해도 잘리지 않게: 칸 폭이 모자라면 한 줄에 하나씩 */
+.facts { grid-template-columns: repeat(auto-fit, minmax(min(100%, 7rem), 1fr)); }
+.month { grid-template-columns: repeat(auto-fit, minmax(min(100%, 8.5rem), 1fr)); }
+.stat-grid { grid-template-columns: repeat(auto-fit, minmax(min(100%, 4rem), 1fr)); }
+.fact, .month div, .stat-grid div { min-width: 0; overflow-wrap: anywhere; }
+/* 4. 키보드로 움직일 때만 파란 테두리 (손가락으로 누를 땐 안 보임) */
+:where(button, a, summary, [role="button"], .tabbar button):focus-visible { outline: 3px solid #90c2ff; outline-offset: 2px; }
+/* 5. 지도 보기 버튼 누르는 높이 44px */
+.map-link { min-height: 44px; }
+/* 3. 아주 좁은 화면(글자 200% 확대 등): 버튼을 한 줄에 하나씩, 카드 여백을 줄여 오른쪽이 잘리지 않게 */
+.btn-row > * { min-width: 0; }
+@media (max-width: 300px) {
+  .card { padding: 16px; }
+  .btn-row, .btn-row.act-row { flex-wrap: wrap; }
+  .btn-row > *, .btn-row.act-row > * { flex: 1 1 100%; white-space: normal; }
+  .btn-row > .more-btn, .btn-row.act-row > .more-btn { flex: 1 1 100%; }
+  .who { flex-wrap: wrap; }
+  .who > div { min-width: 0; }
+  .fee-card { flex-wrap: wrap; }
+}
+/* 시간은 "~" 뒤에서만 줄바꿈 (10:00~ / 18:00) */
+.fact strong, .month strong, .stat-grid strong { overflow-wrap: normal; }
