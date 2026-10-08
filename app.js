@@ -2,7 +2,7 @@
   "use strict";
 
   // 앱 버전(APP_VERSION): 설정 화면 맨 아래에 표시. sw.js의 CACHE 이름과 같이 올림
-  const APP_VERSION = "v71";
+  const APP_VERSION = "v72";
   // 저장소 이름(KEY): 휴대폰 브라우저 안에 자료를 저장할 때 쓰는 이름
   const KEY = "dawon-mobile-v1";
   // 업무 종류(ROLES)
@@ -738,8 +738,9 @@
     const { s, e } = shiftOf(j);
     const pct = Math.max(0, Math.min(100, Math.round(((Date.now() - s) / (e - s)) * 100)));
     const left = Math.max(1, Math.round((e - Date.now()) / 60000));
-    return `<div class="progress" role="progressbar" aria-label="근무 진행" aria-valuetext="${esc(hoursText(left))} 남음" aria-valuenow="${pct}" aria-valuemin="0" aria-valuemax="100"><span style="width:${pct}%"></span></div>
-      <div class="work-time small"><span>${esc(korTime(j.start))} 시작</span><strong>${esc(hoursText(left))} 남음</strong></div>`;
+    // data-s·data-e: 시작·끝 시각(ms) → 10초마다 막대와 남은 시간만 고침 (tickBars)
+    return `<div class="progress" role="progressbar" data-s="${+s}" data-e="${+e}" aria-label="근무 진행" aria-valuetext="${esc(hoursText(left))} 남음" aria-valuenow="${pct}" aria-valuemin="0" aria-valuemax="100"><span style="width:${pct}%"></span></div>
+      <div class="work-time small"><span>${esc(korTime(j.start))} 시작</span><strong class="left">${esc(hoursText(left))} 남음</strong></div>`;
   };
   // 오늘 출근한 사람들: 일하는 중(곧 끝나는 사람부터) → 일 끝난 사람(늦게 끝난 사람부터). 오늘 하루 동안 홈에 남음
   const todayAttended = () => {
@@ -1247,12 +1248,39 @@
   });
   const refresh = () => { save(); render(); };
   // 홈·사람·일감 화면을 보고 있으면 1분마다 다시 그려서 '일하는 중' 막대가 차오르게 함 (입력창이 열려 있으면 건너뜀)
-  setInterval(() => {
+  const liveRefresh = () => {
     if (!["home", "worker", "job"].includes(route.name) || sheet.open || document.hidden) return;
     const y = window.scrollY;
     render();
     window.scrollTo(0, y);
-  }, 60000);
+  };
+  setInterval(liveRefresh, 60000);
+  // 진행 막대·남은 시간: 10초마다 그 부분만 고침 (화면 전체를 다시 그리지 않아 깜빡이지 않음)
+  // 근무가 끝난 막대가 있으면 화면을 다시 그려 '일 끝남'으로 바꿈
+  const tickBars = () => {
+    if (document.hidden) return;
+    const now = Date.now();
+    let ended = false;
+    document.querySelectorAll("#screen .progress[data-e]").forEach((bar) => {
+      const s = Number(bar.dataset.s);
+      const e = Number(bar.dataset.e);
+      if (now >= e) { ended = true; return; }
+      const pct = Math.max(0, Math.min(100, ((now - s) / (e - s)) * 100));
+      bar.firstElementChild.style.width = `${pct.toFixed(1)}%`;
+      bar.setAttribute("aria-valuenow", String(Math.round(pct)));
+      const left = hoursText(Math.max(1, Math.round((e - now) / 60000)));
+      bar.setAttribute("aria-valuetext", `${left} 남음`);
+      const label = bar.nextElementSibling?.querySelector(".left");
+      if (label && label.textContent !== `${left} 남음`) label.textContent = `${left} 남음`;
+    });
+    if (ended) liveRefresh();
+  };
+  setInterval(tickBars, 10000);
+  // 다른 앱을 보다 돌아오거나 화면을 다시 켜면 바로 새로 그림
+  const onBack = () => { if (!document.hidden) liveRefresh(); };
+  document.addEventListener("visibilitychange", onBack);
+  window.addEventListener("pageshow", onBack);
+  window.addEventListener("focus", onBack);
 
   // ---------- 입력창들 ----------
   const roleChips = (name, selected, multi) => `<div class="chips">${ROLES.map((r) => `<label class="chip"><input type="${multi ? "checkbox" : "radio"}" name="${name}" value="${r}" ${selected.includes(r) ? "checked" : ""} ${multi ? "" : "required"} /><span>${r}</span></label>`).join("")}</div>`;

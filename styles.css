@@ -670,3 +670,5 @@ h2 + .day-head { margin-top: 4px; }
 /* 홈 '오늘 출근': 일 끝난 사람 표시 */
 .work-done { display: flex; align-items: center; gap: 6px; margin-top: 10px; color: var(--ok); font-weight: 700; }
 .work-done .ic { width: 16px; height: 16px; }
+/* 일하는 중 막대: 10초마다 조금씩 늘어날 때 부드럽게 */
+.progress[data-e] span { transition: width 1s linear; }
