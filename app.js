@@ -2,7 +2,7 @@
   "use strict";
 
   // 앱 버전(APP_VERSION): 설정 화면 맨 아래에 표시. sw.js의 CACHE 이름과 같이 올림
-  const APP_VERSION = "v74";
+  const APP_VERSION = "v75";
   // 저장소 이름(KEY): 휴대폰 브라우저 안에 자료를 저장할 때 쓰는 이름
   const KEY = "dawon-mobile-v1";
   // 업무 종류(ROLES)
@@ -815,15 +815,15 @@
     return [...working, ...rest.filter((x) => shiftOf(x.j).s > now), ...rest.filter((x) => shiftOf(x.j).s <= now)];
   };
   // 출근한 사람의 근무 상태 (홈 '오늘 출근'과 일감 보기에서 같이 씀). j는 실제 근무 시간이 반영된 일감
-  // 일하는 중 → 진행 막대 / 끝남 → '✓ 일 끝남 · 오후 6시' / 시작 전 → '✓ 출근함 · 오전 10시 시작'
-  const workState = (j, { beforeStart = true } = {}) => {
+  // 일하는 중 → 진행 막대 / 끝남 → '✓ 퇴근함 · 오후 6시'(홈) 또는 '✓ 오후 6시 퇴근'(일감 보기, 위에 '퇴근함'이 이미 있음) / 시작 전 → '✓ 출근함 · 오전 10시 시작'
+  const workState = (j, { beforeStart = true, short = false } = {}) => {
     const { s, e } = shiftOf(j);
     const now = new Date();
     if (now >= s && now < e) return workBar(j);
-    if (now >= e) return `<div class="work-done small">${icon("check")}일 끝남 · ${esc(korTime(j.end))}</div>`;
+    if (now >= e) return `<div class="work-done small">${icon("check")}${short ? `${esc(korTime(j.end))} 퇴근` : `퇴근함 · ${esc(korTime(j.end))}`}</div>`;
     return beforeStart ? `<div class="work-done small">${icon("check")}출근함 · ${esc(korTime(j.start))} 시작</div>` : "";
   };
-  // 오늘 끝난 근무인지 (일감 보기에서 '일 끝남'은 오늘 끝난 일에만 보여줌. 지난 일은 '출근함' 표시로 충분)
+  // 오늘 끝난 근무인지 (일감 보기에서 퇴근 시각 줄은 오늘 끝난 일에만 보여줌. 지난 일은 오른쪽 '퇴근함'으로 충분)
   const endedToday = (j) => { const { e } = shiftOf(j); return e <= new Date() && ymd(e) === today(); };
   const workRow = ({ j, w }) => `<div class="check-row work-row">
       <div class="who"><button class="avatar-link" data-act="open-worker" data-id="${w.id}" aria-label="${esc(w.name)} 보기">${avatar(w)}</button><div><button class="name-link" data-act="open-worker" data-id="${w.id}">${esc(w.name)}</button>
@@ -1009,7 +1009,8 @@
       // 확정된 분: 지금 할 일 2개만 크게, 나머지는 [⋯] 더보기 안으로
       const fee = Number(a.fee) || 0;
       if (a.outcome === "done") {
-        side = `<strong class="row-state ok">출근함</strong>`;
+        // 출근함을 눌렀고 (실제) 근무가 끝났으면 '퇴근함'
+        side = `<strong class="row-state ok">${shiftOf(effJob(a, j)).e <= new Date() ? "퇴근함" : "출근함"}</strong>`;
         // 약속과 다르게 일했으면 "실제 오전 9시 ~ 오후 7시(10시간) · 1시간 연장"
         const ex = extraMin(a, j);
         const actual = effJob(a, j) !== j ? `<span class="small actual-line">실제 ${esc(korTime(effJob(a, j).start))} ~ ${esc(korTime(effJob(a, j).end))}${ex ? ` · <span class="overdue nowrap">${hoursText(Math.abs(ex))} ${ex > 0 ? "연장" : "줄어듦"}</span>` : ""}</span><br>` : "";
@@ -1018,8 +1019,8 @@
       const { main, more } = rowActions(a, j, w);
       buttons = `${main.join("")}${more.length ? `<button class="btn more-btn" data-act="more-actions" data-id="${a.id}" aria-label="더보기">⋯</button>` : ""}`;
       // 출근함 + 근무 시간 안이면 진행 막대 (홈의 '지금 일하는 중'과 같은 기준)
-      // 출근함 + 일하는 중이면 진행 막대, 오늘 일이 끝났으면 '일 끝남' (홈 '오늘 출근'과 같은 기준)
-      const bar = isWorking(a, j) || (a.outcome === "done" && endedToday(effJob(a, j))) ? `<div class="work-row">${workState(effJob(a, j), { beforeStart: false })}</div>` : "";
+      // 출근함 + 일하는 중이면 진행 막대, 오늘 일이 끝났으면 '오후 6시 퇴근' (홈 '오늘 출근'과 같은 기준)
+      const bar = isWorking(a, j) || (a.outcome === "done" && endedToday(effJob(a, j))) ? `<div class="work-row">${workState(effJob(a, j), { beforeStart: false, short: true })}</div>` : "";
       return `<div class="person-row"><div class="who"><button class="avatar-link" data-act="open-worker" data-id="${w.id}" aria-label="${esc(w.name)} 보기">${avatar(w)}</button><div>${head}${state_ ? `<div class="status-line">${state_}</div>` : ""}</div>${side}</div>${bar}<div class="btn-row act-row">${buttons}</div></div>`;
     } else if (a.status === "asked") {
       state_ = `<span class="pill gray">연락함 · 답 기다리는 중</span>`;
@@ -1324,7 +1325,7 @@
   };
   setInterval(liveRefresh, 60000);
   // 진행 막대·남은 시간: 10초마다 그 부분만 고침 (화면 전체를 다시 그리지 않아 깜빡이지 않음)
-  // 근무가 끝난 막대가 있으면 화면을 다시 그려 '일 끝남'으로 바꿈
+  // 근무가 끝난 막대가 있으면 화면을 다시 그려 '퇴근함'으로 바꿈
   const tickBars = () => {
     if (document.hidden) return;
     const now = Date.now();
