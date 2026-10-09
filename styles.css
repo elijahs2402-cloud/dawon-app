@@ -700,3 +700,5 @@ h2 + .day-head { margin-top: 4px; }
 .row-new { color: var(--pri); font-size: .85rem; font-weight: 700; }
 /* 항목 위 오류 안내: 스크롤해 왔을 때 위쪽에 여유 */
 .field-error { margin: 0 0 8px; scroll-margin-top: 16px; }
+/* 사람 화면 받을 수수료: 제목 아래 카드라 목록 위 여백 줄임 */
+.fee-owed .history { margin-top: 0; }

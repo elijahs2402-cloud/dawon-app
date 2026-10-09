@@ -2,7 +2,7 @@
   "use strict";
 
   // 앱 버전(APP_VERSION): 설정 화면 맨 아래에 표시. sw.js의 CACHE 이름과 같이 올림
-  const APP_VERSION = "v81";
+  const APP_VERSION = "v82";
   // 저장소 이름(KEY): 휴대폰 브라우저 안에 자료를 저장할 때 쓰는 이름
   const KEY = "dawon-mobile-v1";
   // 업무 종류(ROLES)
@@ -1194,8 +1194,8 @@
       <span class="small">${a.outcome ? outcomeText[a.outcome] : statusText[a.status]}${a.rehire ? ` · ${icon("heart", "fill")}식당이 또 찾음` : ""}${a.outcome === "done" && Number(a.fee) ? ` · 수수료 ${a.paid ? "받음" : `<span class="overdue">미수</span>`}` : ""}</span></li>`;
     // 이 분의 받을 수수료
     const owed = unpaidList(w.id);
-    const owedCard = owed.length ? `<div class="card fee-owed">
-      <div class="progress-head"><strong>받을 수수료 ${won(feeSumOf(owed))}</strong><span class="muted">${owed.length}건</span></div>
+    // 받을 수수료: 예정된 일과 별개인 칸이라 제목을 따로 달아 띄움 (홈의 받을 수수료와 같은 모양)
+    const owedCard = owed.length ? `<h2>받을 수수료 <span class="count">${won(feeSumOf(owed))}</span> <span class="muted small" style="font-weight:400">${owed.length}건</span></h2><div class="card fee-owed">
       <ul class="history">${owed.map(({ a, j }) => `<li>${esc(shortDate(j.date))} ${esc(restName(j))} ${esc(j.role)} · <strong>${won(a.fee)}</strong> <span class="small ${daysBetween(j.date, today()) > 0 ? "overdue" : "muted"}">${overdueText(j)}</span></li>`).join("")}</ul>
       <div class="btn-row">${w.phone ? `<a class="btn" href="${smsHref(w.phone, feeMsg(w, owed))}">${icon("message")}수수료 안내</a>` : ""}<button class="btn" data-act="pay-all" data-id="${w.id}">${icon("check")}${owed.length > 1 ? "모두 받음" : "받음"}</button></div></div>` : "";
 
