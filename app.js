@@ -2,7 +2,7 @@
   "use strict";
 
   // 앱 버전(APP_VERSION): 설정 화면 맨 아래에 표시. sw.js의 CACHE 이름과 같이 올림
-  const APP_VERSION = "v80";
+  const APP_VERSION = "v81";
   // 저장소 이름(KEY): 휴대폰 브라우저 안에 자료를 저장할 때 쓰는 이름
   const KEY = "dawon-mobile-v1";
   // 업무 종류(ROLES)
@@ -1210,6 +1210,7 @@
     ${workingNow().filter((x) => x.w.id === w.id).map(({ j }) => `<div class="card work-row work-card">
       <div class="progress-head"><strong>지금 일하는 중</strong><button class="name-link small" data-act="open-job" data-id="${j.id}">${esc(restName(j))} ${esc(j.role)}</button></div>
       ${workBar(j)}</div>`).join("")}
+    <h2>예정된 일</h2>${upcoming.length ? `<div class="card"><ul class="history">${upcoming.map(line).join("")}</ul></div>` : `<div class="empty">예정된 일이 없어요. 일감에서 확정하면 여기에 나와요.</div>`}
     ${owedCard}
     <h2>신뢰 표시</h2>
     <div class="trust-card">
@@ -1219,7 +1220,6 @@
     <h2>약속 기록</h2>
     <div class="stat-grid"><div><strong>${s.done}</strong><small>${icon("check")}출근</small></div><div><strong>${s.late}</strong><small>${icon("alert")}직전취소</small></div><div><strong>${s.noshow}</strong><small>${icon("x")}안 나옴</small></div><div><strong>${s.rehire}</strong><small>${icon("heart", "fill")}또 찾음</small></div></div>
     ${ranks.length ? `<div class="card"><p style="margin:0"><strong>지금 추천 순서</strong></p>${ranks.map((r) => `<p class="small" style="margin:4px 0 0">${esc(r.role)}: ${r.total}명 중 <strong>${r.pos}번째</strong></p>`).join("")}<p class="hint">약속 잘 지키고 오래 쉰 분이 앞 순서예요. 재촉 전화가 오면 참고하세요.</p></div>` : ""}
-    <h2>예정된 일</h2>${upcoming.length ? `<div class="card"><ul class="history">${upcoming.map(line).join("")}</ul></div>` : `<div class="empty">예정된 일이 없어요. 일감에서 확정하면 여기에 나와요.</div>`}
     <h2>지난 기록</h2>${past.length ? `<div class="card"><ul class="history">${past.map(line).join("")}</ul></div>` : `<div class="empty">아직 기록이 없어요.</div>`}
     <div class="danger-zone"><button class="btn big" data-act="toggle-active" data-id="${w.id}">${w.active === false ? "명단에 다시 보이기" : "명단에서 숨기기 (기록은 남음)"}</button>
       <button class="link-btn" data-act="del-worker" data-id="${w.id}">이 사람 완전히 지우기</button></div>`;
