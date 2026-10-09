@@ -696,3 +696,5 @@ h2 + .day-head { margin-top: 4px; }
 .chip.taken span { opacity: .55; cursor: not-allowed; }
 /* 밤·주말·공휴일 시급이 비었을 때 안내 */
 .calc-note { color: var(--warn); font-weight: 600; }
+/* 일감 고치기: 새로 켠 업무 줄 표시 */
+.row-new { color: var(--pri); font-size: .85rem; font-weight: 700; }
