@@ -2,7 +2,7 @@
   "use strict";
 
   // 앱 버전(APP_VERSION): 설정 화면 맨 아래에 표시. sw.js의 CACHE 이름과 같이 올림
-  const APP_VERSION = "v75";
+  const APP_VERSION = "v76";
   // 저장소 이름(KEY): 휴대폰 브라우저 안에 자료를 저장할 때 쓰는 이름
   const KEY = "dawon-mobile-v1";
   // 업무 종류(ROLES)
@@ -539,6 +539,20 @@
     } else summary.focus();
     summary.scrollIntoView({ block: "nearest" });
   };
+  // 오류가 난 칸을 고르거나 적어서 올바르게 되면 오류 문구를 바로 지움 (라디오는 같은 이름 묶음 기준)
+  const clearFormError = (e) => {
+    const el = e.target;
+    if (!el.matches?.("input, select, textarea") || !$("#sheet-error", sheetForm)) return;
+    const group = el.type === "radio" && el.name ? [...sheetForm.querySelectorAll(`input[type=radio][name="${el.name}"]`)] : [el];
+    if (!group.some((x) => x.getAttribute("aria-invalid") === "true") || !group.every((x) => x.validity.valid)) return;
+    $("#sheet-error", sheetForm)?.remove();
+    $("#sheet-field-error", sheetForm)?.remove();
+    group.forEach((x) => {
+      x.removeAttribute("aria-invalid");
+      const ids = (x.getAttribute("aria-describedby") || "").split(" ").filter((id) => id && id !== "sheet-error" && id !== "sheet-field-error");
+      if (ids.length) x.setAttribute("aria-describedby", ids.join(" ")); else x.removeAttribute("aria-describedby");
+    });
+  };
   const toast = (msg) => {
     lastToast = msg;
     if (/못했|없어요|먼저|골라 주세요|확인해 주세요|같아요|이미 다 찼|확정된 분|사이로|하나 이상/.test(msg)) {
@@ -585,6 +599,8 @@
   const sheet = $("#sheet");
   const sheetForm = $("#sheet-form");
   sheet.setAttribute("aria-labelledby", "sheet-title"); // 화면 읽기 기능이 팝업 제목을 읽어 줌
+  sheetForm.addEventListener("input", (e) => clearFormError(e));
+  sheetForm.addEventListener("change", (e) => clearFormError(e));
   let sheetSubmit = null, sheetRevision = 0;
   // 입력창이 닫힐 때 아래로 미끄러져 내려가게 함 (원래 닫기 기능을 감싸서 사용)
   const nativeClose = HTMLDialogElement.prototype.close;
@@ -658,7 +674,7 @@
       if (ids.length) el.setAttribute("aria-describedby", ids.join(" ")); else el.removeAttribute("aria-describedby");
     });
     const invalid = [...sheetForm.elements].find((el) => el.validity && !el.validity.valid);
-    if (invalid) { formError(invalid.validationMessage, invalid); return; }
+    if (invalid) { formError(invalid.dataset.error || invalid.validationMessage, invalid); return; }
     lastToast = "";
     const submittedRevision = sheetRevision;
     if (sheetSubmit(new FormData(sheetForm), sheetForm) !== false) sheet.close();
@@ -1352,7 +1368,7 @@
   window.addEventListener("focus", onBack);
 
   // ---------- 입력창들 ----------
-  const roleChips = (name, selected, multi) => `<div class="chips">${ROLES.map((r) => `<label class="chip"><input type="${multi ? "checkbox" : "radio"}" name="${name}" value="${r}" ${selected.includes(r) ? "checked" : ""} ${multi ? "" : "required"} /><span>${r}</span></label>`).join("")}</div>`;
+  const roleChips = (name, selected, multi) => `<div class="chips">${ROLES.map((r) => `<label class="chip"><input type="${multi ? "checkbox" : "radio"}" name="${name}" value="${r}" ${selected.includes(r) ? "checked" : ""} ${multi ? "" : 'required data-error="업무를 골라 주세요"'} /><span>${r}</span></label>`).join("")}</div>`;
   const val = (fd, k) => String(fd.get(k) ?? "").trim();
 
   // 일감 받기 / 고치기
@@ -1400,7 +1416,7 @@
     };
     const body = `
       <label class="field">식당
-        <select name="restaurantId" required>
+        <select name="restaurantId" required data-error="식당을 골라 주세요">
           <option value="">식당을 고르세요</option>
           ${rests.map((r) => `<option value="${r.id}" ${r.id === j.restaurantId ? "selected" : ""}>${esc(r.name)}${r.area ? ` (${esc(r.area)})` : ""}</option>`).join("")}
           <option value="__new" ${rests.length ? "" : "selected"}>+ 새 식당 등록</option>
@@ -1414,7 +1430,7 @@
       <fieldset class="field"><legend>날짜</legend>
         <div class="chips">${quick}${existing ? "" : `<label class="chip"><input type="radio" name="dateQuick" value="multi" ${presetMulti ? "checked" : ""} /><span>여러 날</span></label>`}</div>
         <div class="date-range">
-          <input type="date" name="date" aria-label="날짜 (시작일)" value="${esc(j.date)}" required />
+          <input type="date" name="date" aria-label="날짜 (시작일)" value="${esc(j.date)}" required data-error="날짜를 골라 주세요" />
           <span class="range-to" hidden>~</span>
           <input type="date" name="dateEnd" aria-label="끝나는 날짜" value="${presetMulti ? esc(preset.dates[preset.dates.length - 1]) : ""}" hidden />
         </div>
@@ -1686,7 +1702,7 @@
             <button type="button" class="btn ghost" data-photo-clear ${hasPhoto ? "" : "hidden"}>사진 지우기</button>
           </div>
         </div>
-        <label class="field">이름<input name="name" required autocomplete="off" value="${esc(w.name)}" /></label>
+        <label class="field">이름<input name="name" required data-error="이름을 적어 주세요" autocomplete="off" value="${esc(w.name)}" /></label>
         <label class="field">전화번호<input name="phone" type="tel" inputmode="tel" placeholder="010-0000-0000" value="${esc(w.phone)}" /></label>
         <div id="dup-box"></div>
         <fieldset class="field"><legend>할 수 있는 일 <span class="hint" style="display:inline">여러 개 · 나중에 골라도 돼요</span></legend>${roleChips("roles", w.roles || [], true)}</fieldset>
@@ -1962,7 +1978,7 @@
   };
   // 식당 이름 칸 (키가 있으면 오른쪽에 검색 버튼)
   const placeNameField = (p, value = "", required = false) => `<label class="field">식당 이름
-      <span class="name-search"><input name="${addrName(p, "name")}" autocomplete="off" ${required ? "required" : ""} value="${esc(value)}" />${KAKAO_JS_KEY ? `<button type="button" class="name-search-btn" data-place-search="${p}" aria-label="식당 이름으로 찾기">${icon("search")}찾기</button>` : ""}</span>
+      <span class="name-search"><input name="${addrName(p, "name")}" autocomplete="off" data-error="식당 이름을 적어 주세요" ${required ? "required" : ""} value="${esc(value)}" />${KAKAO_JS_KEY ? `<button type="button" class="name-search-btn" data-place-search="${p}" aria-label="식당 이름으로 찾기">${icon("search")}찾기</button>` : ""}</span>
       ${KAKAO_JS_KEY ? `<span class="hint">찾기를 누르면 주소·전화가 자동으로 들어가요</span>` : ""}</label>`;
 
   // 주소 + 상세 주소를 한 줄로 (예: 경상북도 구미시 낙동강변로 889 (신평동), 2층)
@@ -1997,11 +2013,11 @@
     const s = existing || { title: "", kind: "sms", text: "" };
     openSheet({
       title: existing ? "문구 고치기" : "새 문구",
-      body: `<label class="field">제목<input name="title" required value="${esc(s.title)}" placeholder="예: 비 오는 날 안내" /></label>
+      body: `<label class="field">제목<input name="title" required data-error="제목을 적어 주세요" value="${esc(s.title)}" placeholder="예: 비 오는 날 안내" /></label>
         <fieldset class="field"><legend>어디에 쓰나요?</legend><div class="chips">
           <label class="chip"><input type="radio" name="kind" value="sms" ${s.kind !== "talk" ? "checked" : ""} /><span>문자</span></label>
           <label class="chip"><input type="radio" name="kind" value="talk" ${s.kind === "talk" ? "checked" : ""} /><span>전화로 말할 때</span></label></div></fieldset>
-        <label class="field">내용<textarea name="text" rows="6" required>${esc(s.text)}</textarea></label>
+        <label class="field">내용<textarea name="text" rows="6" required data-error="내용을 적어 주세요">${esc(s.text)}</textarea></label>
         ${existing ? `<button type="button" class="link-btn" data-act="del-script" data-id="${existing.id}">이 문구 지우기</button>` : ""}`,
       onSubmit: (fd) => {
         const data = { title: val(fd, "title"), kind: val(fd, "kind") || "sms", text: val(fd, "text") };
@@ -2019,7 +2035,7 @@
     openSheet({
       title: `${w?.name || ""}님 확정 취소`,
       body: `<p>왜 취소하나요?</p><div class="choice-list">
-        <label class="choice"><input type="radio" name="kind" value="mistake" required /><span><strong>잘못 눌렀어요</strong><small>명단에서 빼고 추천 순서로 돌려요 · 기록에 안 남아요</small></span></label>
+        <label class="choice"><input type="radio" name="kind" value="mistake" required data-error="왜 취소하는지 골라 주세요" /><span><strong>잘못 눌렀어요</strong><small>명단에서 빼고 추천 순서로 돌려요 · 기록에 안 남아요</small></span></label>
         <label class="choice"><input type="radio" name="kind" value="rest_cancel" /><span><strong>식당 사정으로 취소</strong><small>그 사람 기록에 불이익 없음</small></span></label>
         <label class="choice"><input type="radio" name="kind" value="cancel_ok" /><span><strong>본인이 미리 알려줬어요</strong><small>하루 전 이상 · 기록에 불이익 없음</small></span></label>
         <label class="choice"><input type="radio" name="kind" value="late" /><span><strong>본인이 직전에 취소했어요</strong><small>약속 기록에 '직전 취소'로 남아요</small></span></label>
