@@ -2,7 +2,7 @@
   "use strict";
 
   // 앱 버전(APP_VERSION): 설정 화면 맨 아래에 표시. sw.js의 CACHE 이름과 같이 올림
-  const APP_VERSION = "v88";
+  const APP_VERSION = "v89";
   // 저장소 이름(KEY): 휴대폰 브라우저 안에 자료를 저장할 때 쓰는 이름
   const KEY = "dawon-mobile-v1";
   // 업무 종류(ROLES)
@@ -847,20 +847,20 @@
       .sort((x, y) => shiftOf(y.j).e - shiftOf(x.j).e);
     return [...working, ...rest.filter((x) => shiftOf(x.j).s > now), ...rest.filter((x) => shiftOf(x.j).s <= now)];
   };
-  // 홈 '오늘 출근'의 근무 상태. j는 실제 근무 시간이 반영된 일감
-  // 일하는 중 → 진행 막대 / 끝남 → '✓ 퇴근함 · 오후 6시' / 시작 전 → '✓ 출근함 · 오전 10시 시작'
-  // (일감 보기는 오른쪽 '퇴근함' + 일한 시간 한 줄로 따로 보여줌)
-  const workState = (j) => {
+  // 홈 '오늘 출근' 한 줄: 일감 보기의 확정 카드와 같은 모양
+  //  이름 ······ 출근함/퇴근함 (오른쪽) / 식당 업무 / 일한 시간 "오전 6시~10시 · 1시간 연장"(연장·단축만 주황)
+  //  일하는 중이면 그 아래 진행 막대. j는 실제 근무 시간이 반영된 일감
+  const workRow = ({ a, j, w }) => {
     const { s, e } = shiftOf(j);
     const now = new Date();
-    if (now >= s && now < e) return workBar(j);
-    if (now >= e) return `<div class="work-done small">${icon("check")}퇴근함 · ${esc(korTime(j.end))}</div>`;
-    return `<div class="work-done small">${icon("check")}출근함 · ${esc(korTime(j.start))} 시작</div>`;
-  };
-  const workRow = ({ j, w }) => `<div class="check-row work-row">
+    const ex = extraMin(a, job(a.jobId));
+    const time = `<span class="small work-span">${esc(timeSpan(j.start, j.end))}${ex ? ` · <span class="overdue nowrap">${hoursText(Math.abs(ex))} ${ex > 0 ? "연장" : "줄어듦"}</span>` : ""}</span>`;
+    return `<div class="check-row work-row">
       <div class="who"><button class="avatar-link" data-act="open-worker" data-id="${w.id}" aria-label="${esc(w.name)} 보기">${avatar(w)}</button><div><button class="name-link" data-act="open-worker" data-id="${w.id}">${esc(w.name)}</button>
-      <div class="muted small">${esc(restName(j))} ${esc(j.role)}</div></div></div>
-      ${workState(j)}</div>`;
+      <div class="muted small">${esc(restName(j))} ${esc(j.role)}</div><div class="status-line">${time}</div></div>
+      <strong class="row-state ok">${now >= e ? "퇴근함" : "출근함"}</strong></div>
+      ${now >= s && now < e ? workBar(j) : ""}</div>`;
+  };
 
   // 근무 시작 시각이 지났는데 출근 여부를 아직 안 적은 사람들 (출근함을 누르면 '오늘 출근'으로 옮겨감)
   const pendingChecks = () => {
