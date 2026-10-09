@@ -2,7 +2,7 @@
   "use strict";
 
   // 앱 버전(APP_VERSION): 설정 화면 맨 아래에 표시. sw.js의 CACHE 이름과 같이 올림
-  const APP_VERSION = "v78";
+  const APP_VERSION = "v79";
   // 저장소 이름(KEY): 휴대폰 브라우저 안에 자료를 저장할 때 쓰는 이름
   const KEY = "dawon-mobile-v1";
   // 업무 종류(ROLES)
@@ -520,29 +520,36 @@
     box.hidden = false;
   };
   $("#app-error button").addEventListener("click", () => { $("#app-error").hidden = true; });
+  // 입력 오류 안내: 칸이 정해진 오류는 그 칸 바로 아래에만 (위쪽 요약과 겹쳐 두 번 보이지 않게),
+  // 칸이 없는 오류만 입력창 맨 위 요약 상자에
   const formError = (message, target) => {
-    let summary = $("#sheet-error", sheetForm);
-    if (!summary) {
-      summary = document.createElement("div"); summary.id = "sheet-error";
-      summary.className = "error-note"; summary.setAttribute("role", "alert"); summary.tabIndex = -1;
-      $(".sheet-body", sheetForm).prepend(summary);
-    }
-    summary.textContent = message;
+    $("#sheet-error", sheetForm)?.remove();
+    $("#sheet-field-error", sheetForm)?.remove();
     if (target?.matches("input, select, textarea")) {
       const note = document.createElement("p"); note.className = "error-note field-error";
-      note.id = "sheet-field-error"; note.textContent = message;
-      $("#sheet-field-error", sheetForm)?.remove();
-      (target.closest("label") || target).after(note);
+      note.id = "sheet-field-error"; note.setAttribute("role", "alert"); note.textContent = message;
+      // 칩·선택지(라디오·체크)는 목록 전체 아래에, 나머지는 그 칸(이름표) 아래에
+      const anchor = target.matches("[type=radio], [type=checkbox]") ? target.closest(".chips, .choice-list") || target.closest("label") || target : target.closest("label") || target;
+      anchor.after(note);
       target.setAttribute("aria-invalid", "true");
       target.setAttribute("aria-describedby", [...new Set([...(target.getAttribute("aria-describedby") || "").split(" ").filter(Boolean), "sheet-field-error"])].join(" "));
       target.focus();
-    } else summary.focus();
+      note.scrollIntoView({ block: "nearest" });
+      return;
+    }
+    const summary = document.createElement("div"); summary.id = "sheet-error";
+    summary.className = "error-note"; summary.setAttribute("role", "alert"); summary.tabIndex = -1;
+    summary.textContent = message;
+    $(".sheet-body", sheetForm).prepend(summary);
+    summary.focus();
     summary.scrollIntoView({ block: "nearest" });
   };
   // 오류가 난 칸을 고르거나 적어서 올바르게 되면 오류 문구를 바로 지움 (라디오는 같은 이름 묶음 기준)
   const clearFormError = (e) => {
     const el = e.target;
-    if (!el.matches?.("input, select, textarea") || !$("#sheet-error", sheetForm)) return;
+    if (!el.matches?.("input, select, textarea") || !($("#sheet-error", sheetForm) || $("#sheet-field-error", sheetForm))) return;
+    // 칸이 정해지지 않은 위쪽 안내(예: 업무를 골라 주세요)는 무엇이든 고르거나 적으면 바로 지움
+    if ($("#sheet-error", sheetForm) && !$("#sheet-field-error", sheetForm)) { $("#sheet-error", sheetForm).remove(); return; }
     const group = el.type === "radio" && el.name ? [...sheetForm.querySelectorAll(`input[type=radio][name="${el.name}"]`)] : [el];
     if (!group.some((x) => x.getAttribute("aria-invalid") === "true") || !group.every((x) => x.validity.valid)) return;
     $("#sheet-error", sheetForm)?.remove();
@@ -556,7 +563,9 @@
   const toast = (msg) => {
     lastToast = msg;
     if (/못했|없어요|먼저|골라 주세요|확인해 주세요|같아요|이미 다 찼|확정된 분|사이로|하나 이상/.test(msg)) {
-      if ($("#sheet").open) formError(msg); else showError(msg);
+      // 입력창이 열려 있으면 입력창 안 빨간 상자로만 알림 (아래 검은 말풍선까지 띄우면 같은 말이 두 번 보임)
+      if ($("#sheet").open) { formError(msg); $("#toast").classList.remove("show"); return; }
+      showError(msg);
     }
     const box = $("#toast");
     // 입력창이 열려 있으면 안내 글을 입력창 안으로 옮겨서 가려지지 않게 함
