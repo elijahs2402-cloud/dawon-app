@@ -2,7 +2,7 @@
   "use strict";
 
   // 앱 버전(APP_VERSION): 설정 화면 맨 아래에 표시. sw.js의 CACHE 이름과 같이 올림
-  const APP_VERSION = "v73";
+  const APP_VERSION = "v74";
   // 저장소 이름(KEY): 휴대폰 브라우저 안에 자료를 저장할 때 쓰는 이름
   const KEY = "dawon-mobile-v1";
   // 업무 종류(ROLES)
@@ -165,6 +165,7 @@
     st.feeTrack = true;
   };
   const isValidData = (s) => s && Array.isArray(s.workers) && Array.isArray(s.jobs) && Array.isArray(s.assigns) && Array.isArray(s.restaurants);
+  let localLoadError = false;
   const load = () => {
     try {
       const saved = JSON.parse(localStorage.getItem(KEY));
@@ -176,13 +177,15 @@
         st.assigns.forEach((a) => { if (a.status === "standby") a.status = "asked"; });
         return st;
       }
-    } catch (_) {}
+      if (saved !== null) localLoadError = true;
+    } catch (_) { localLoadError = true; }
     return blank();
   };
   let state = load();
   const save = () => {
-    try { localStorage.setItem(KEY, JSON.stringify(state)); }
-    catch (_) { toast("저장하지 못했어요. 백업 파일을 꼭 만들어 두세요."); }
+    if (localLoadError) { showError("기존 자료를 읽지 못해 저장을 멈췄어요. 백업에서 복원해 주세요."); return; }
+    try { localStorage.setItem(KEY, JSON.stringify(state)); window.DawonBackup?.changed(); }
+    catch (_) { showError("휴대폰에 저장하지 못했어요. 저장 공간을 확인하고 ‘백업 파일 만들기’를 눌러 주세요."); }
   };
   // 휴대폰이 저장 공간을 정리할 때 이 자료를 지우지 않도록 요청
   try { navigator.storage?.persist?.(); } catch (_) {}
@@ -208,18 +211,34 @@
       });
     };
     return {
-      all: async () => { const keys = await run("readonly", (s) => s.getAllKeys()); const vals = await run("readonly", (s) => s.getAll()); return keys.map((k, i) => [k, vals[i]]); },
+      all: async () => {
+        const db = await open();
+        return new Promise((resolve, reject) => {
+          const tx = db.transaction("photos", "readonly"); const store = tx.objectStore("photos");
+          const keys = store.getAllKeys(), values = store.getAll();
+          tx.oncomplete = () => resolve(keys.result.map((k, i) => [k, values.result[i]]));
+          tx.onabort = tx.onerror = () => reject(tx.error);
+        });
+      },
       put: (id, url) => run("readwrite", (s) => s.put(url, id)),
       del: (id) => run("readwrite", (s) => s.delete(id)),
       clear: () => run("readwrite", (s) => s.clear()),
+      replace: async (entries) => {
+        const db = await open();
+        return new Promise((resolve, reject) => {
+          const tx = db.transaction("photos", "readwrite"); const store = tx.objectStore("photos");
+          store.clear(); Object.entries(entries).forEach(([id, url]) => store.put(url, id));
+          tx.oncomplete = resolve; tx.onabort = tx.onerror = () => reject(tx.error);
+        });
+      },
     };
   })();
   const setPhoto = async (id, url) => {
     if (!url) return;
     photos.set(id, url);
-    try { await photoDb.put(id, url); } catch (_) { toast("사진을 저장하지 못했어요. 휴대폰 저장 공간을 확인해 주세요."); }
+    try { await photoDb.put(id, url); window.DawonBackup?.changed(); } catch (_) { showError("사진을 저장하지 못했어요. 휴대폰 저장 공간을 확인해 주세요."); }
   };
-  const removePhoto = (id) => { photos.delete(id); photoDb.del(id).catch(() => {}); };
+  const removePhoto = (id) => { photos.delete(id); photoDb.del(id).then(() => window.DawonBackup?.changed()).catch(() => showError("사진을 지우지 못했어요. 저장 공간을 확인해 주세요.")); };
   // shrinkImage: 사진을 작은 정사각형(가로세로 240)으로 줄여서 용량을 아낌
   const shrinkImage = (src, size = 240) => new Promise((resolve) => {
     const img = new Image();
@@ -494,8 +513,37 @@
     "확인 부탁드려요. 고맙습니다.",
   );
   // ---------- 알림(토스트) ----------
-  let toastTimer;
+  let toastTimer, lastToast = "";
+  const showError = (message) => {
+    const box = $("#app-error");
+    box.querySelector("span").textContent = message;
+    box.hidden = false;
+  };
+  $("#app-error button").addEventListener("click", () => { $("#app-error").hidden = true; });
+  const formError = (message, target) => {
+    let summary = $("#sheet-error", sheetForm);
+    if (!summary) {
+      summary = document.createElement("div"); summary.id = "sheet-error";
+      summary.className = "error-note"; summary.setAttribute("role", "alert"); summary.tabIndex = -1;
+      $(".sheet-body", sheetForm).prepend(summary);
+    }
+    summary.textContent = message;
+    if (target?.matches("input, select, textarea")) {
+      const note = document.createElement("p"); note.className = "error-note field-error";
+      note.id = "sheet-field-error"; note.textContent = message;
+      $("#sheet-field-error", sheetForm)?.remove();
+      (target.closest("label") || target).after(note);
+      target.setAttribute("aria-invalid", "true");
+      target.setAttribute("aria-describedby", [...new Set([...(target.getAttribute("aria-describedby") || "").split(" ").filter(Boolean), "sheet-field-error"])].join(" "));
+      target.focus();
+    } else summary.focus();
+    summary.scrollIntoView({ block: "nearest" });
+  };
   const toast = (msg) => {
+    lastToast = msg;
+    if (/못했|없어요|먼저|골라 주세요|확인해 주세요|같아요|이미 다 찼|확정된 분|사이로|하나 이상/.test(msg)) {
+      if ($("#sheet").open) formError(msg); else showError(msg);
+    }
     const box = $("#toast");
     // 입력창이 열려 있으면 안내 글을 입력창 안으로 옮겨서 가려지지 않게 함
     const host = $("#sheet").open ? $("#sheet") : document.body;
@@ -537,7 +585,7 @@
   const sheet = $("#sheet");
   const sheetForm = $("#sheet-form");
   sheet.setAttribute("aria-labelledby", "sheet-title"); // 화면 읽기 기능이 팝업 제목을 읽어 줌
-  let sheetSubmit = null;
+  let sheetSubmit = null, sheetRevision = 0;
   // 입력창이 닫힐 때 아래로 미끄러져 내려가게 함 (원래 닫기 기능을 감싸서 사용)
   const nativeClose = HTMLDialogElement.prototype.close;
   let closeTimer = null;
@@ -588,6 +636,7 @@
   sheetForm.addEventListener("pointerup", endDrag);
   sheetForm.addEventListener("pointercancel", endDrag);
   const openSheet = ({ title, body, submit = "저장", onSubmit, onReady }) => {
+    sheetRevision++;
     // 닫히는 중에 새 창을 열면 닫기를 취소하고 내용만 바꿈
     if (closeTimer) { clearTimeout(closeTimer); closeTimer = null; sheet.classList.remove("closing"); }
     sheetForm.innerHTML = `<div class="sheet-head"><h2 id="sheet-title">${esc(title)}</h2><button type="button" class="icon-btn" data-close aria-label="닫기">${icon("x")}</button></div>
@@ -600,8 +649,20 @@
   };
   sheetForm.addEventListener("submit", (e) => {
     e.preventDefault();
-    if (!sheetSubmit || !sheetForm.reportValidity()) return;
+    if (!sheetSubmit) return;
+    $("#sheet-error", sheetForm)?.remove();
+    $("#sheet-field-error", sheetForm)?.remove();
+    sheetForm.querySelectorAll("[aria-invalid]").forEach((el) => {
+      el.removeAttribute("aria-invalid");
+      const ids = (el.getAttribute("aria-describedby") || "").split(" ").filter((id) => id && id !== "sheet-error" && id !== "sheet-field-error");
+      if (ids.length) el.setAttribute("aria-describedby", ids.join(" ")); else el.removeAttribute("aria-describedby");
+    });
+    const invalid = [...sheetForm.elements].find((el) => el.validity && !el.validity.valid);
+    if (invalid) { formError(invalid.validationMessage, invalid); return; }
+    lastToast = "";
+    const submittedRevision = sheetRevision;
     if (sheetSubmit(new FormData(sheetForm), sheetForm) !== false) sheet.close();
+    else if (lastToast && submittedRevision === sheetRevision) formError(lastToast, document.activeElement);
   });
   sheetForm.addEventListener("click", (e) => {
     if (e.target.closest("[data-close]")) { sheet.close(); return; }
@@ -828,6 +889,7 @@
         <button class="btn primary big" data-act="new-job">${icon("plus")}일감 받기</button>
         <button class="btn big" data-act="new-worker">${icon("plus")}사람 등록</button>
       </div>`;
+    if (window.DawonBackup?.enabled()) html += `<p class="hint" data-backup-summary role="status" aria-live="polite">${esc(window.DawonBackup.summary())}</p>`;
 
     if (!hasData) {
       html += `<h2>처음 오셨네요</h2><div class="card"><p>1. <strong>사람 등록</strong>으로 일할 분을 적어 주세요.</p><p>2. 식당에서 전화가 오면 <strong>일감 받기</strong>를 누르세요.</p><p>3. 일감 화면에서 추천 순서대로 연락하고 <strong>확정</strong>을 누르면 끝이에요.</p>
@@ -840,7 +902,7 @@
       html += `<button class="fee-line" data-act="go-fee"><span>받을 수수료 <strong>${won(feeSumOf(owed.flat()))}</strong> · ${owed.length}명</span><span class="go">보기</span></button>`;
     }
     // 백업 안내: 한 줄로 작게
-    if (backupDays === null || backupDays >= 7) {
+    if (!window.DawonBackup?.enabled() && (backupDays === null || backupDays >= 7)) {
       html += `<button class="backup-line" data-act="backup">${icon("download")}<span>${backupDays === null ? "아직 백업을 안 했어요" : `백업한 지 ${backupDays}일 지났어요`}</span><strong>백업하기</strong></button>`;
     }
     // 지금 바로 처리할 것부터: 출근 체크 → 일하는 중
@@ -1190,11 +1252,12 @@
       <p><strong>아이폰 사파리:</strong> 아래 공유 버튼 → '홈 화면에 추가'</p>
     </details>
     <h2>백업</h2>
+    <section id="cloud-backup" class="card cloud-backup"></section>
     <div class="menu">
       ${menuRow("backup", "download", "백업 파일 만들기", backupSub, state.lastBackup && daysBetween(state.lastBackup, today()) < 7 ? "" : "warn")}
       ${menuRow("import", "folder", "백업 파일 불러오기", "휴대폰을 바꿨을 때 자료를 되살려요")}
     </div>
-    <p class="hint" style="margin:0 4px 0">자료는 이 휴대폰 안에만 있어요. 백업 파일은 '내 파일 → 다운로드'에 저장되고, 카카오톡 '나와의 채팅'에 보내 두면 더 안전해요.</p>
+    <p class="hint" style="margin:0 4px 0">수동 백업 파일은 암호화되지 않아요. ‘내 파일 → 다운로드’에 저장되므로 안전한 곳에 보관해 주세요.</p>
     <h2>연습</h2>
     <div class="menu">
       ${menuRow("seed", "play", "연습용 예시 자료 넣기", hasData ? "지금 자료는 그대로 두고 사람 20명·식당 20곳을 더해요" : "가짜 사람·식당·일감으로 눌러 볼 수 있어요")}
@@ -1223,6 +1286,7 @@
     $("#title").textContent = route.name === "job" ? "일감 보기" : route.name === "worker" ? (worker(route.id)?.name || "사람") : TITLES[route.name];
     const scr = $("#screen");
     scr.innerHTML = (screens[route.name] || renderHome)(route.id);
+    if (route.name === "more") window.DawonBackup?.mount($("#cloud-backup"));
     markSelected(scr);
     // 화면을 옮겼을 때만 움직임 (버튼 누를 때마다 다시 그려도 흔들리지 않게)
     const dir = navDir;
@@ -2047,6 +2111,21 @@
     refresh();
     toast("백업 파일을 만들었어요 (다운로드 폴더)");
   };
+  const restoreData = async (data) => {
+    await photosReady.catch(() => {});
+    window.DawonBackupCrypto.validate(data);
+    const { photos: savedPhotos = {}, ...rest } = data;
+    const next = { ...blank(), feeTrack: false, ...rest };
+    startFeeTrack(next);
+    next.assigns.forEach((a) => { if (a.status === "standby") a.status = "asked"; });
+    const previousPhotos = Object.fromEntries(photos);
+    await photoDb.replace(savedPhotos);
+    try { localStorage.setItem(KEY, JSON.stringify(next)); }
+    catch (error) { await photoDb.replace(previousPhotos); throw new Error("휴대폰 저장 공간이 부족해 복원하지 못했어요. 기존 자료를 유지했어요."); }
+    state = next; localLoadError = false; photosReadError = false;
+    photos.clear(); Object.entries(savedPhotos).forEach(([id, url]) => photos.set(id, url));
+    window.DawonBackup?.changed(); render();
+  };
   $("#import-file").addEventListener("change", async (e) => {
     const file = e.target.files[0];
     e.target.value = "";
@@ -2055,18 +2134,11 @@
       const data = JSON.parse(await file.text());
       if (!isValidData(data)) throw new Error("bad");
       if (!(await ask({ title: "백업 파일을 불러올까요?", text: `지금 휴대폰의 자료가 백업 내용으로 바뀌어요.\n(사람 ${data.workers.length}명, 일감 ${data.jobs.length}건)`, ok: "불러오기", danger: true }))) return;
-      const { photos: savedPhotos = {}, ...rest } = data;
-      state = { ...blank(), feeTrack: false, ...rest };
-      startFeeTrack(state);
-      // 예전 백업의 '대기 중'은 '연락함'으로 바꿈
-      state.assigns.forEach((a) => { if (a.status === "standby") a.status = "asked"; });
-      photos.clear();
-      await photoDb.clear().catch(() => {});
-      for (const [id, url] of Object.entries(savedPhotos)) await setPhoto(id, url);
-      refresh();
+      doBackup();
+      await restoreData(data);
       toast("백업을 불러왔어요");
-    } catch (_) {
-      toast("다원 백업 파일이 아니에요. 파일을 확인해 주세요.");
+    } catch (error) {
+      showError(error.message === "bad" || error instanceof SyntaxError ? "다원 백업 파일이 아니에요. 파일을 확인해 주세요." : error.message || "백업을 불러오지 못했어요. 저장 공간을 확인해 주세요.");
     }
   });
 
@@ -2554,15 +2626,27 @@
   }
 
   // 사진을 먼저 불러온 뒤 첫 화면을 그림 (0.8초 안에 안 되면 먼저 그리고, 사진이 오면 다시 그림)
-  let photosLoaded = false;
+  let photosLoaded = false, photosReadError = false;
   const photosReady = photoDb.all()
     .then((list) => list.forEach(([id, url]) => photos.set(id, url)))
-    .catch(() => {})
+    .catch(() => { photosReadError = true; throw new Error("사진 저장소를 읽지 못했어요. 백업을 멈췄으니 휴대폰 저장 공간을 확인해 주세요."); })
     .finally(() => { photosLoaded = true; });
-  Promise.race([photosReady, new Promise((r) => setTimeout(r, 800))]).then(() => {
+  window.DawonBackup?.init({
+    snapshot: async () => {
+      await photosReady.catch(() => {});
+      if (photosReadError) throw new Error("사진 저장소를 읽지 못해 자동 백업을 멈췄어요. 저장 공간을 확인해 주세요.");
+      if (localLoadError) throw new Error("휴대폰 자료를 읽지 못해 자동 백업을 멈췄어요. 기존 백업에서 복원해 주세요.");
+      return structuredClone({ ...state, photos: Object.fromEntries(photos) });
+    },
+    restore: restoreData,
+    checkpoint: async () => { await photosReady.catch(() => {}); return { data: structuredClone({ ...state, photos: Object.fromEntries(photos) }), rawState: localStorage.getItem(KEY), unreadable: localLoadError || photosReadError }; },
+    confirm: (data) => ask({ title: "백업 자료로 바꿀까요?", text: `사람 ${data.workers.length}명 · 일감 ${data.jobs.length}건으로 바뀌어요. 복원 전 자료는 휴대폰에 따로 남겨 둡니다.`, ok: "복원", danger: true }),
+  });
+  Promise.race([photosReady.catch((e) => showError(e.message)), new Promise((r) => setTimeout(r, 800))]).then(() => {
     const late = !photosLoaded;
     render();
     // 사진이 늦게 왔을 때만 한 번 더 그림 (제때 왔으면 다시 그리지 않아 첫 움직임이 끊기지 않음)
-    if (late) photosReady.then(() => { if (photos.size) render(); });
+    if (late) photosReady.then(() => { if (photos.size) render(); }).catch((e) => showError(e.message));
+    if (localLoadError) showError("저장된 자료를 읽지 못했어요. 백업에서 복원하기 전까지 새 자료 입력을 멈춰 주세요.");
   });
 })();

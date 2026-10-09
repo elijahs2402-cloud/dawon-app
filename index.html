@@ -11,6 +11,8 @@
     <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css" crossorigin />
     <link rel="stylesheet" href="styles.css" />
+    <script src="backup-crypto.js" defer></script>
+    <script src="backup.js" defer></script>
     <script src="app.js" defer></script>
   </head>
   <body>
@@ -21,6 +23,7 @@
     </header>
 
     <!-- 화면 내용이 여기에 그려짐 -->
+    <aside id="app-error" class="app-error" role="alert" hidden><span></span><button type="button" aria-label="오류 안내 닫기">닫기</button></aside>
     <main id="screen"></main>
 
     <!-- 아래쪽 메뉴 (선 아이콘) -->

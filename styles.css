@@ -27,6 +27,20 @@
   --ease: cubic-bezier(.2, .8, .2, 1);
 }
 
+.app-error { max-width: 560px; margin: 12px auto; padding: 16px 20px; color: var(--bad); background: var(--bad-soft); }
+.app-error[hidden] { display: none; }
+.app-error button { min-height: 44px; margin-top: 8px; padding: 8px 16px; border: 1px solid currentColor; border-radius: 12px; color: inherit; background: var(--card); font: inherit; }
+.error-note { padding: 12px; border-radius: 12px; background: var(--bad-soft); color: var(--bad); font-size: 1rem; overflow-wrap: anywhere; }
+[aria-invalid="true"] { outline: 2px solid var(--bad); outline-offset: 2px; }
+.cloud-backup { display: block; padding: 20px; }
+.cloud-backup h3 { margin: 0 0 12px; }
+.cloud-backup p { overflow-wrap: anywhere; }
+.cloud-backup .field { margin: 12px 0; }
+.cloud-backup button { min-height: 48px; margin: 4px 4px 4px 0; }
+.cloud-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.cloud-backup [data-cloud-versions]:not(:empty) { border-top: 1px solid var(--line); padding-top: 12px; margin-top: 16px; }
+.cloud-backup select { width: 100%; min-height: 48px; font: inherit; }
+.cloud-backup button:disabled { opacity: .6; cursor: wait; }
 * { box-sizing: border-box; }
 html { font-size: 18px; -webkit-text-size-adjust: 100%; }
 body {
