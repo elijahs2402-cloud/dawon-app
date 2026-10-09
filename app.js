@@ -2,7 +2,7 @@
   "use strict";
 
   // 앱 버전(APP_VERSION): 설정 화면 맨 아래에 표시. sw.js의 CACHE 이름과 같이 올림
-  const APP_VERSION = "v76";
+  const APP_VERSION = "v77";
   // 저장소 이름(KEY): 휴대폰 브라우저 안에 자료를 저장할 때 쓰는 이름
   const KEY = "dawon-mobile-v1";
   // 업무 종류(ROLES)
@@ -1390,7 +1390,12 @@
 
   // existing: 고칠 일감 (없으면 새로 받기)
   // preset: '같은 식당·날짜로 업무 추가'에서 넘겨주는 값 { restaurantId, dates, start, end, breakMin, req }
-  const jobForm = (existing, preset = null) => {
+  // scope: 여러 날 일감을 고칠 때 "one"(이 날만) / "all"(이 날부터 남은 날 모두)
+  const jobForm = (existing, preset = null, scope = "one") => {
+    // 고칠 대상: 이 일감 + (남은 날 모두면) 같은 묶음의 이후 날짜들 (식당 취소된 날 제외)
+    const targets = existing ? (scope === "all" ? groupOf(existing).filter((x) => !x.canceled && x.date >= existing.date) : [existing]) : [];
+    // 같이 부른 다른 업무(같은 날 같은 요청)에 이미 있는 업무는 고를 수 없게
+    const taken = new Set(targets.flatMap((t) => reqOf(t).filter((x) => x.id !== t.id).map((x) => x.role)));
     const j = existing || { date: preset?.dates?.[0] || today(), start: preset?.start || "", end: preset?.end || "", breakMin: preset?.breakMin || 0, role: "", memo: "", restaurantId: preset?.restaurantId || "" };
     const presetMulti = !existing && preset?.dates?.length > 1;
     // 최근에 일감을 준 식당이 위로
@@ -1399,7 +1404,12 @@
     const quick = ["오늘", "내일", "모레"].map((label, n) => `<label class="chip"><input type="radio" name="dateQuick" value="${today(n)}" ${!presetMulti && j.date === today(n) ? "checked" : ""} /><span>${label}</span></label>`).join("");
     // 업무 고르기: 새로 받을 때는 여러 개(체크), 고칠 때는 하나(라디오)
     const roleType = existing ? "radio" : "checkbox";
-    const roleChipsHtml = ROLES.map((r, i) => `<label class="chip"><input type="${roleType}" name="roles" value="${i}" ${j.role === r ? "checked" : ""} /><span>${r}</span></label>`).join("");
+    const roleChipsHtml = ROLES.map((r, i) => {
+      const blocked = existing && taken.has(r) && j.role !== r;
+      return `<label class="chip ${blocked ? "taken" : ""}"><input type="${roleType}" name="roles" value="${i}" ${j.role === r ? "checked" : ""} ${blocked ? "disabled" : ""} /><span>${r}${blocked ? " · 이미 있음" : ""}</span></label>`;
+    }).join("");
+    // 시급 칸: 12000 → "12,000" (저장할 때는 num()이 쉼표를 빼고 읽음)
+    const money = (v) => (Number(v) ? Number(v).toLocaleString("ko-KR") : "");
     // 업무 한 줄: 인원 + 시급 + (밤 근무면) 밤 시급 + 계산
     const roleRow = (i) => {
       // 고칠 때는 그 일감 값, 새로 받을 때는 설정의 기본 시급
@@ -1409,8 +1419,9 @@
         <div class="role-row-head"><strong>${ROLES[i]}</strong>
           <div class="stepper small"><button type="button" data-step="-1" aria-label="줄이기">${icon("minus")}</button><input name="hc_${i}" aria-label="${ROLES[i]} 인원 (명)" type="number" min="1" max="20" value="${esc(mine.headcount || 1)}" /><button type="button" data-step="1" aria-label="늘리기">${icon("plus")}</button></div>
         </div>
-        <input name="hr_${i}" aria-label="${ROLES[i]} 시급 (원)" class="role-in" inputmode="numeric" placeholder="시급 (예: 11000)" value="${esc(mine.hourly || "")}" />
-        <div class="night-in" hidden><input name="nh_${i}" aria-label="${ROLES[i]} 밤·주말·공휴일 시급 (원)" class="role-in" inputmode="numeric" placeholder="밤·주말·공휴일 시급 (비우면 낮 시급과 같아요)" value="${esc(mine.nightHourly || "")}" /><button type="button" class="name-search-btn" data-night-x="${i}">1.5배</button></div>
+        <label class="mini-label">시급 (원)<input name="hr_${i}" aria-label="${ROLES[i]} 시급 (원)" class="role-in money" inputmode="numeric" placeholder="예: 12,000" value="${esc(money(mine.hourly))}" /></label>
+        <div class="night-wrap" hidden><label class="mini-label" for="nh-in-${i}">밤·주말·공휴일 시급 (원)</label>
+          <div class="night-in"><input id="nh-in-${i}" name="nh_${i}" aria-label="${ROLES[i]} 밤·주말·공휴일 시급 (원)" class="role-in money" inputmode="numeric" placeholder="비우면 낮 시급과 같아요" value="${esc(money(mine.nightHourly))}" /><button type="button" class="name-search-btn" data-night-x="${i}">1.5배</button></div></div>
         <div class="row-calc"></div>
       </div>`;
     };
@@ -1472,7 +1483,7 @@
     const num = (v) => Number(String(v ?? "").replace(/[^0-9]/g, ""));
 
     openSheet({
-      title: existing ? "일감 고치기" : preset ? "업무 추가" : "일감 받기",
+      title: existing ? (targets.length > 1 ? `일감 고치기 (남은 ${targets.length}일 모두)` : "일감 고치기") : preset ? "업무 추가" : "일감 받기",
       body,
       submit: existing ? "저장" : "저장하고 사람 찾기",
       onReady: (form) => {
@@ -1508,9 +1519,17 @@
         // 업무 줄 맞추기: 고른 업무만 줄로 보여줌 (이미 적은 값은 그대로 둠)
         const syncRows = () => {
           const picked = [...form.querySelectorAll("input[name=roles]:checked")].map((x) => Number(x.value));
-          rowsBox.querySelectorAll(".role-row").forEach((row) => { if (!picked.includes(Number(row.dataset.i))) row.remove(); });
+          let carry = null; // 고치기에서 업무를 바꾸면 빠지는 줄의 값을 기억해 둠
+          rowsBox.querySelectorAll(".role-row").forEach((row) => {
+            if (picked.includes(Number(row.dataset.i))) return;
+            const k = row.dataset.i;
+            if (existing) carry = { hc: form.elements[`hc_${k}`].value, hr: form.elements[`hr_${k}`].value, nh: form.elements[`nh_${k}`].value };
+            row.remove();
+          });
           picked.forEach((i) => {
-            if (!rowsBox.querySelector(`.role-row[data-i="${i}"]`)) rowsBox.insertAdjacentHTML("beforeend", roleRow(i));
+            if (rowsBox.querySelector(`.role-row[data-i="${i}"]`)) return;
+            rowsBox.insertAdjacentHTML("beforeend", roleRow(i));
+            if (carry) { form.elements[`hc_${i}`].value = carry.hc; form.elements[`hr_${i}`].value = carry.hr; form.elements[`nh_${i}`].value = carry.nh; }
           });
           // 업무 순서대로 정렬
           [...rowsBox.children].sort((a, b) => a.dataset.i - b.dataset.i).forEach((el) => rowsBox.append(el));
@@ -1537,7 +1556,7 @@
             : hasNight ? "밤 10시~아침 6시가 들어간 근무예요. 밤 시급을 넣거나 [1.5배]를 눌러 주세요" : "";
           rowsBox.querySelectorAll(".role-row").forEach((row) => {
             const i = row.dataset.i;
-            row.querySelector(".night-in").hidden = !hasNight && !anyHoliday;
+            row.querySelector(".night-wrap").hidden = !hasNight && !anyHoliday;
             const hourly = num(form.elements[`hr_${i}`].value);
             const night = num(form.elements[`nh_${i}`].value);
             const out = row.querySelector(".row-calc");
@@ -1551,13 +1570,20 @@
                     : `${won(hourly)} × ${hoursText(b.dayMin)}`;
                 const label = kinds.length > 1 ? (h ? "주말·공휴일 " : "평일 ") : h ? "휴일 " : "";
                 return `${label}${parts} = <strong>일당 ${won(b.pay)}</strong>`;
-              }).join("<br>");
+              }).join("<br>") + ((hasNight || anyHoliday) && !night ? `<br><span class="calc-note">밤·주말·공휴일 시급이 비어 있어 낮 시급으로 계산했어요</span>` : "");
             } else if (existing?.pay && !existing.hourly && !hourly) {
               out.innerHTML = `예전에 넣은 일당 <strong>${won(existing.pay)}</strong> · 시급을 넣으면 다시 계산돼요`;
             } else out.innerHTML = min ? `근무 ${hoursText(min)} · 시급을 넣으면 일당이 계산돼요` : "";
           });
         };
-        rowsBox.addEventListener("input", calc);
+        rowsBox.addEventListener("input", (e) => {
+          if (e.target.classList.contains("money")) {
+            const n = num(e.target.value);
+            const shown = n ? n.toLocaleString("ko-KR") : "";
+            if (e.target.value !== shown) e.target.value = shown;
+          }
+          calc();
+        });
         // [1.5배]: 그 업무의 낮 시급 × 1.5를 밤 시급 칸에
         rowsBox.addEventListener("click", (e) => {
           const b = e.target.closest("[data-night-x]");
@@ -1565,7 +1591,7 @@
           const i = b.dataset.nightX;
           const h = num(form.elements[`hr_${i}`].value);
           if (!h) { toast("낮 시급을 먼저 넣어 주세요"); form.elements[`hr_${i}`].focus(); return; }
-          form.elements[`nh_${i}`].value = Math.round(h * 1.5);
+          form.elements[`nh_${i}`].value = Math.round(h * 1.5).toLocaleString("ko-KR");
           calc();
         });
         form.querySelectorAll("input[name=roles]").forEach((x) => x.addEventListener("change", syncRows));
@@ -1634,7 +1660,7 @@
         // 업무마다 인원·시급·일당
         const perRole = roleIdx.map((i) => {
           const hourly = num(val(fd, `hr_${i}`));
-          const nightHourly = night ? num(val(fd, `nh_${i}`)) : 0;
+          const nightHourly = night || existing ? num(val(fd, `nh_${i}`)) : 0;
           const keepOld = existing && !hourly ? Number(existing.pay) || 0 : 0; // 예전 일당만 있던 일감
           return {
             role: ROLES[i],
@@ -1648,11 +1674,45 @@
         const forDate = (p, date) => ({ holiday: holidayOf(date), ...(p.hourly ? { pay: payBreakdown(start, end, breakMin, p.hourly, p.nightHourly, holidayOf(date)).pay } : {}) });
         const common = { restaurantId, start, end, breakMin, memo: val(fd, "memo") };
         if (existing) {
-          Object.assign(existing, common, perRole[0], { date: dates[0] }, forDate(perRole[0], dates[0]));
+          // 바꾼 칸만 골라냄 → 남은 날에는 바꾼 칸만 똑같이 적용 (손대지 않은 칸은 날마다 원래 값 그대로)
+          const KEYS = ["restaurantId", "start", "end", "breakMin", "memo", "role", "headcount", "hourly", "nightHourly"];
+          const after = { ...common, ...perRole[0] };
+          const changed = KEYS.filter((k) => String(existing[k] ?? "") !== String(after[k] ?? ""));
+          const oldRest = existing.restaurantId;
+          const oldDate = existing.date;
+          // 같이 부른 다른 업무(같은 날 같은 요청): 바꾸기 전에 찾아 둠
+          const siblings = targets.flatMap((t) => reqOf(t).filter((x) => x.id !== t.id && !targets.includes(x)));
+          Object.assign(existing, after, { date: dates[0] }, forDate(perRole[0], dates[0]));
+          targets.filter((t) => t !== existing).forEach((t) => {
+            changed.forEach((k) => { t[k] = after[k]; });
+            const h = t.holiday ?? isHolidayDate(t.date);
+            t.holiday = h;
+            if (t.hourly) t.pay = payBreakdown(t.start, t.end, t.breakMin, t.hourly, t.nightHourly, h).pay;
+          });
           // 일당이 바뀌면 이미 출근한 분 수수료도 다시 계산
-          assignsOf(existing.id).filter((a) => a.outcome === "done").forEach((a) => { a.fee = feeOf(a, existing); });
+          targets.forEach((t) => assignsOf(t.id).filter((a) => a.outcome === "done").forEach((a) => { a.fee = feeOf(a, t); }));
           refresh();
-          toast("고쳤어요");
+          toast(targets.length > 1 ? `남은 ${targets.length}일을 모두 고쳤어요` : "고쳤어요");
+          // 식당이나 날짜를 바꿨으면, 같이 부른 업무도 옮길지 물어봄 (시간은 업무마다 다를 수 있어 그대로 둠)
+          const moved = restaurantId !== oldRest || dates[0] !== oldDate;
+          if (moved && siblings.length) {
+            const what = [restaurantId !== oldRest ? `식당 → ${restName(existing)}` : "", dates[0] !== oldDate ? `날짜 → ${shortDate(dates[0])}` : ""].filter(Boolean).join(", ");
+            const roles = [...new Set(siblings.map((x) => x.role))].join("·");
+            setTimeout(async () => {
+              if (!(await ask({ title: `같이 부른 ${roles}도 옮길까요?`, text: `${what}\n같은 요청으로 받은 ${roles} 일감도 똑같이 바꿔요.`, ok: "같이 옮기기", cancel: "이 업무만" }))) return;
+              siblings.forEach((x) => {
+                if (restaurantId !== oldRest) x.restaurantId = restaurantId;
+                if (dates[0] !== oldDate && x.date === oldDate) {
+                  x.date = dates[0];
+                  x.holiday = isHolidayDate(x.date);
+                  if (x.hourly) x.pay = payBreakdown(x.start, x.end, x.breakMin, x.hourly, x.nightHourly, x.holiday).pay;
+                }
+                assignsOf(x.id).filter((a) => a.outcome === "done").forEach((a) => { a.fee = feeOf(a, x); });
+              });
+              refresh();
+              toast(`${roles}도 옮겼어요`);
+            }, 250);
+          }
           return;
         }
         // 날짜마다 체크표에서 남겨 둔 업무만 (하루짜리면 고른 업무 모두)
@@ -2348,7 +2408,21 @@
         onSubmit: (fd) => { openFor(val(fd, "scope") === "all" ? days : [j]); return false; },
       });
     },
-    "edit-job": (el) => jobForm(job(el.dataset.id)),
+    "edit-job": (el) => {
+      const j = job(el.dataset.id);
+      if (!j) return;
+      const later = groupOf(j).filter((x) => !x.canceled && x.date >= j.date);
+      if (later.length < 2) { jobForm(j); return; }
+      // 여러 날 일감: 식당 취소와 같은 방식으로 먼저 물어봄
+      openSheet({
+        title: "일감 고치기",
+        body: `<p>어느 날을 고칠까요?</p><div class="choice-list">
+          <label class="choice"><input type="radio" name="scope" value="one" checked /><span><strong>이 날만</strong><small>${esc(shortDate(j.date))}</small></span></label>
+          <label class="choice"><input type="radio" name="scope" value="all" /><span><strong>남은 날 모두</strong><small>${later.map((x) => esc(shortDate(x.date))).join(", ")} (${later.length}일) · 바꾼 칸만 똑같이 바뀌어요</small></span></label></div>`,
+        submit: "다음",
+        onSubmit: (fd) => { jobForm(j, null, val(fd, "scope") === "all" ? "all" : "one"); return false; },
+      });
+    },
     "open-job": (el) => {
       if (sheet.open) sheet.close();
       // 1·2·3일째, 업무 탭(같은 묶음)끼리는 쌓지 않고 바꿔치기

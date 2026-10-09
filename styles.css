@@ -686,3 +686,13 @@ h2 + .day-head { margin-top: 4px; }
 .work-done .ic { width: 16px; height: 16px; }
 /* 일하는 중 막대: 10초마다 조금씩 늘어날 때 부드럽게 */
 .progress[data-e] span { transition: width 1s linear; }
+/* 일감 받기·고치기: 업무 줄 칸 이름(시급·밤 시급)이 늘 보이게 */
+.mini-label { display: grid; gap: 4px; font-size: .85rem; font-weight: 700; color: var(--sub); }
+.night-wrap { display: grid; gap: 4px; }
+.night-wrap[hidden] { display: none; }
+/* 인원 숫자: 16px 이상 (작으면 읽기 어렵고 휴대폰이 확대함) */
+.stepper.small input { font-size: 1rem; font-weight: 700; }
+/* 같이 부른 업무에 이미 있는 업무: 고를 수 없음 */
+.chip.taken span { opacity: .55; cursor: not-allowed; }
+/* 밤·주말·공휴일 시급이 비었을 때 안내 */
+.calc-note { color: var(--warn); font-weight: 600; }
