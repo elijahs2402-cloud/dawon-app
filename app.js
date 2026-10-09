@@ -2,7 +2,7 @@
   "use strict";
 
   // 앱 버전(APP_VERSION): 설정 화면 맨 아래에 표시. sw.js의 CACHE 이름과 같이 올림
-  const APP_VERSION = "v87";
+  const APP_VERSION = "v88";
   // 저장소 이름(KEY): 휴대폰 브라우저 안에 자료를 저장할 때 쓰는 이름
   const KEY = "dawon-mobile-v1";
   // 업무 종류(ROLES)
@@ -463,6 +463,12 @@
     const part = h === 0 ? "밤" : h < 12 ? "오전" : "오후";
     return `${part} ${h % 12 || 12}시${m ? ` ${m}분` : ""}`;
   };
+  // 짧은 시간 범위: 오전·오후가 같으면 한 번만 → "오전 6시~10시", 다르면 "오전 10시~오후 6시"
+  const timeSpan = (start, end) => {
+    const a = korTime(start), b = korTime(end);
+    const pa = a.split(" ")[0], pb = b.split(" ")[0];
+    return pa === pb ? `${a}~${b.slice(pb.length + 1)}` : `${a}~${b}`;
+  };
   // 근무시간: "오전 6시 ~ 오후 3시(9시간)", 휴게가 있으면 "(8시간 30분, 휴게 30분)"
   const korRange = (j) => `${korTime(j.start)} ~ ${korTime(j.end)}(${hoursText(workMinutes(j.start, j.end, j.breakMin))}${j.breakMin ? `, 휴게 ${hoursText(Number(j.breakMin))}` : ""})`;
   // 식당에 보내는 문자: 같은 요청의 업무를 모아 한 통으로 (확정된 사람·근무시간·연락처·남은 인원)
@@ -841,17 +847,16 @@
       .sort((x, y) => shiftOf(y.j).e - shiftOf(x.j).e);
     return [...working, ...rest.filter((x) => shiftOf(x.j).s > now), ...rest.filter((x) => shiftOf(x.j).s <= now)];
   };
-  // 출근한 사람의 근무 상태 (홈 '오늘 출근'과 일감 보기에서 같이 씀). j는 실제 근무 시간이 반영된 일감
-  // 일하는 중 → 진행 막대 / 끝남 → '✓ 퇴근함 · 오후 6시'(홈) 또는 '✓ 오후 6시 퇴근'(일감 보기, 위에 '퇴근함'이 이미 있음) / 시작 전 → '✓ 출근함 · 오전 10시 시작'
-  const workState = (j, { beforeStart = true, short = false } = {}) => {
+  // 홈 '오늘 출근'의 근무 상태. j는 실제 근무 시간이 반영된 일감
+  // 일하는 중 → 진행 막대 / 끝남 → '✓ 퇴근함 · 오후 6시' / 시작 전 → '✓ 출근함 · 오전 10시 시작'
+  // (일감 보기는 오른쪽 '퇴근함' + 일한 시간 한 줄로 따로 보여줌)
+  const workState = (j) => {
     const { s, e } = shiftOf(j);
     const now = new Date();
     if (now >= s && now < e) return workBar(j);
-    if (now >= e) return `<div class="work-done small">${icon("check")}${short ? `${esc(korTime(j.end))} 퇴근` : `퇴근함 · ${esc(korTime(j.end))}`}</div>`;
-    return beforeStart ? `<div class="work-done small">${icon("check")}출근함 · ${esc(korTime(j.start))} 시작</div>` : "";
+    if (now >= e) return `<div class="work-done small">${icon("check")}퇴근함 · ${esc(korTime(j.end))}</div>`;
+    return `<div class="work-done small">${icon("check")}출근함 · ${esc(korTime(j.start))} 시작</div>`;
   };
-  // 오늘 끝난 근무인지 (일감 보기에서 퇴근 시각 줄은 오늘 끝난 일에만 보여줌. 지난 일은 오른쪽 '퇴근함'으로 충분)
-  const endedToday = (j) => { const { e } = shiftOf(j); return e <= new Date() && ymd(e) === today(); };
   const workRow = ({ j, w }) => `<div class="check-row work-row">
       <div class="who"><button class="avatar-link" data-act="open-worker" data-id="${w.id}" aria-label="${esc(w.name)} 보기">${avatar(w)}</button><div><button class="name-link" data-act="open-worker" data-id="${w.id}">${esc(w.name)}</button>
       <div class="muted small">${esc(restName(j))} ${esc(j.role)}</div></div></div>
@@ -1038,16 +1043,17 @@
       if (a.outcome === "done") {
         // 출근함을 눌렀고 (실제) 근무가 끝났으면 '퇴근함'
         side = `<strong class="row-state ok">${shiftOf(effJob(a, j)).e <= new Date() ? "퇴근함" : "출근함"}</strong>`;
-        // 약속과 다르게 일했으면 "실제 오전 9시 ~ 오후 7시(10시간) · 1시간 연장"
+        // 퇴근했거나 약속과 다르게 일했으면 일한 시간 한 줄: "오전 6시~10시 · 1시간 연장" (연장·단축만 주황)
+        // 그 아래 돈 한 줄: "수수료 3,600원 · 안 받음 / 받음"
         const ex = extraMin(a, j);
-        const actual = effJob(a, j) !== j ? `<span class="small actual-line">실제 ${esc(korTime(effJob(a, j).start))} ~ ${esc(korTime(effJob(a, j).end))}${ex ? ` · <span class="overdue nowrap">${hoursText(Math.abs(ex))} ${ex > 0 ? "연장" : "줄어듦"}</span>` : ""}</span><br>` : "";
-        state_ = `${actual}${fee ? `<span class="small">수수료 ${won(fee)} · ${a.paid ? `<span class="paid">받음</span>` : `<span class="overdue">미수</span>`}</span>` : ""}`;
+        const ended = shiftOf(effJob(a, j)).e <= new Date();
+        const timeLine = ended || effJob(a, j) !== j ? `<span class="small work-span">${esc(timeSpan(effJob(a, j).start, effJob(a, j).end))}${ex ? ` · <span class="overdue nowrap">${hoursText(Math.abs(ex))} ${ex > 0 ? "연장" : "줄어듦"}</span>` : ""}</span><br>` : "";
+        state_ = `${timeLine}${fee ? `<span class="small">수수료 ${won(fee)} · ${a.paid ? `<span class="paid">받음</span>` : `<span class="overdue nowrap">안 받음</span>`}</span>` : ""}`;
       } else side = `<strong class="row-state">확정</strong>`;
       const { main, more } = rowActions(a, j, w);
       buttons = `${main.join("")}${more.length ? `<button class="btn more-btn" data-act="more-actions" data-id="${a.id}" aria-label="더보기">⋯</button>` : ""}`;
-      // 출근함 + 근무 시간 안이면 진행 막대 (홈의 '지금 일하는 중'과 같은 기준)
-      // 출근함 + 일하는 중이면 진행 막대, 오늘 일이 끝났으면 '오후 6시 퇴근' (홈 '오늘 출근'과 같은 기준)
-      const bar = isWorking(a, j) || (a.outcome === "done" && endedToday(effJob(a, j))) ? `<div class="work-row">${workState(effJob(a, j), { beforeStart: false, short: true })}</div>` : "";
+      // 출근함 + 일하는 중이면 진행 막대 (퇴근하면 막대 대신 위의 일한 시간 줄과 오른쪽 '퇴근함')
+      const bar = isWorking(a, j) ? `<div class="work-row">${workBar(effJob(a, j))}</div>` : "";
       return `<div class="person-row"><div class="who"><button class="avatar-link" data-act="open-worker" data-id="${w.id}" aria-label="${esc(w.name)} 보기">${avatar(w)}</button><div>${head}${state_ ? `<div class="status-line">${state_}</div>` : ""}</div>${side}</div>${bar}<div class="btn-row act-row">${buttons}</div></div>`;
     } else if (a.status === "asked") {
       state_ = `<span class="pill gray">연락함 · 답 기다리는 중</span>`;
