@@ -698,3 +698,5 @@ h2 + .day-head { margin-top: 4px; }
 .calc-note { color: var(--warn); font-weight: 600; }
 /* 일감 고치기: 새로 켠 업무 줄 표시 */
 .row-new { color: var(--pri); font-size: .85rem; font-weight: 700; }
+/* 항목 위 오류 안내: 스크롤해 왔을 때 위쪽에 여유 */
+.field-error { margin: 0 0 8px; scroll-margin-top: 16px; }

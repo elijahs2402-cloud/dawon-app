@@ -2,7 +2,7 @@
   "use strict";
 
   // 앱 버전(APP_VERSION): 설정 화면 맨 아래에 표시. sw.js의 CACHE 이름과 같이 올림
-  const APP_VERSION = "v79";
+  const APP_VERSION = "v80";
   // 저장소 이름(KEY): 휴대폰 브라우저 안에 자료를 저장할 때 쓰는 이름
   const KEY = "dawon-mobile-v1";
   // 업무 종류(ROLES)
@@ -520,7 +520,7 @@
     box.hidden = false;
   };
   $("#app-error button").addEventListener("click", () => { $("#app-error").hidden = true; });
-  // 입력 오류 안내: 칸이 정해진 오류는 그 칸 바로 아래에만 (위쪽 요약과 겹쳐 두 번 보이지 않게),
+  // 입력 오류 안내: 칸이 정해진 오류는 그 항목 바로 '위'에만 (위쪽 요약과 겹쳐 두 번 보이지 않게) + 그 항목으로 스크롤,
   // 칸이 없는 오류만 입력창 맨 위 요약 상자에
   const formError = (message, target) => {
     $("#sheet-error", sheetForm)?.remove();
@@ -528,13 +528,13 @@
     if (target?.matches("input, select, textarea")) {
       const note = document.createElement("p"); note.className = "error-note field-error";
       note.id = "sheet-field-error"; note.setAttribute("role", "alert"); note.textContent = message;
-      // 칩·선택지(라디오·체크)는 목록 전체 아래에, 나머지는 그 칸(이름표) 아래에
-      const anchor = target.matches("[type=radio], [type=checkbox]") ? target.closest(".chips, .choice-list") || target.closest("label") || target : target.closest("label") || target;
-      anchor.after(note);
+      // 항목 묶음(식당·날짜·업무와 인원 등 .field) 바로 위에. 묶음이 없으면 선택지 목록·이름표 위에
+      const anchor = target.closest(".field") || target.closest(".chips, .choice-list") || target.closest("label") || target;
+      anchor.before(note);
       target.setAttribute("aria-invalid", "true");
       target.setAttribute("aria-describedby", [...new Set([...(target.getAttribute("aria-describedby") || "").split(" ").filter(Boolean), "sheet-field-error"])].join(" "));
-      target.focus();
-      note.scrollIntoView({ block: "nearest" });
+      target.focus({ preventScroll: true });
+      note.scrollIntoView({ block: "start", behavior: reduceMotion ? "auto" : "smooth" });
       return;
     }
     const summary = document.createElement("div"); summary.id = "sheet-error";
@@ -550,8 +550,10 @@
     if (!el.matches?.("input, select, textarea") || !($("#sheet-error", sheetForm) || $("#sheet-field-error", sheetForm))) return;
     // 칸이 정해지지 않은 위쪽 안내(예: 업무를 골라 주세요)는 무엇이든 고르거나 적으면 바로 지움
     if ($("#sheet-error", sheetForm) && !$("#sheet-field-error", sheetForm)) { $("#sheet-error", sheetForm).remove(); return; }
-    const group = el.type === "radio" && el.name ? [...sheetForm.querySelectorAll(`input[type=radio][name="${el.name}"]`)] : [el];
-    if (!group.some((x) => x.getAttribute("aria-invalid") === "true") || !group.every((x) => x.validity.valid)) return;
+    const kind = el.type === "radio" || el.type === "checkbox" ? el.type : "";
+    const group = kind && el.name ? [...sheetForm.querySelectorAll(`input[type=${kind}][name="${el.name}"]`)] : [el];
+    const ok = kind === "checkbox" ? group.some((x) => x.checked) : group.every((x) => x.validity.valid);
+    if (!group.some((x) => x.getAttribute("aria-invalid") === "true") || !ok) return;
     $("#sheet-error", sheetForm)?.remove();
     $("#sheet-field-error", sheetForm)?.remove();
     group.forEach((x) => {
@@ -1655,13 +1657,14 @@
       },
       onSubmit: (fd, form) => {
         const roleIdx = fd.getAll("roles").map(Number);
-        if (!roleIdx.length) { toast("업무를 골라 주세요 (여러 개 가능)"); form.querySelector("input[name=roles]").closest("fieldset").scrollIntoView({ block: "center" }); return false; }
+        if (!roleIdx.length) { formError("업무를 골라 주세요 (여러 개 가능)", form.querySelector("input[name=roles]:not(:disabled)")); return false; }
         const start = val(fd, "start");
         const end = val(fd, "end");
-        if (!start || !end) { toast("시작·끝 시간을 골라 주세요"); form.querySelector(".time-pick").scrollIntoView({ block: "center" }); return false; }
-        if (start === end) { toast("시작과 끝 시간이 같아요. 끝 시간을 다시 골라 주세요"); form.querySelector(".time-pick").scrollIntoView({ block: "center" }); return false; }
+        const hourOf = (name) => form.querySelector(`.time-pick[data-time="${name}"] [data-part="h"]`);
+        if (!start || !end) { formError("시작·끝 시간을 골라 주세요", hourOf(start ? "end" : "start")); return false; }
+        if (start === end) { formError("시작과 끝 시간이 같아요. 끝 시간을 다시 골라 주세요", hourOf("end")); return false; }
         const dates = datesOf(form);
-        if (!dates.length) { toast("날짜를 확인해 주세요"); return false; }
+        if (!dates.length) { formError("날짜를 확인해 주세요", form.elements.date); return false; }
         if (dates.length > MAX_DAYS) { toast(`한 번에 ${MAX_DAYS}일까지 넣을 수 있어요`); return false; }
         let restaurantId = val(fd, "restaurantId");
         if (restaurantId === "__new") {
@@ -1752,7 +1755,7 @@
         const plan = dates
           .map((date) => ({ date, roles: perRole.filter((p, k) => dates.length < 2 || planOn(date, roleIdx[k])) }))
           .filter((x) => x.roles.length);
-        if (!plan.length) { toast("날마다 필요한 업무를 하나 이상 남겨 주세요"); form.querySelector(".day-plan")?.scrollIntoView({ block: "center" }); return false; }
+        if (!plan.length) { formError("날마다 필요한 업무를 하나 이상 남겨 주세요", form.querySelector(".day-plan input")); return false; }
         // group: 같은 업무의 여러 날 묶음 / req: 같은 날 같은 요청(찬모·서빙 함께)
         const groups = Object.fromEntries(perRole.map((p) => [p.role, plan.filter((x) => x.roles.includes(p)).length > 1 ? uid() : ""]));
         const reqs = Object.fromEntries(plan.map((x) => [x.date, preset?.reqByDate?.[x.date] || (x.roles.length > 1 ? uid() : "")]));
